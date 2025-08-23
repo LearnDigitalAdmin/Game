@@ -1,4 +1,4 @@
-import { useState, useEffect, type SetStateAction } from "react";
+import { useState, useEffect } from "react";
 import { LandingScreen } from "./global/screens/LandingScreen";
 import { ModeSelection } from "./global/screens/ModeSelection";
 import { LoadingScreen } from "./global/screens/LoadingScreen";
@@ -8,6 +8,21 @@ import { ManagerClubSelection } from "./manager/setup/ManagerClubSelection";
 import { ModeHome } from "./global/layout/ModeHome";
 import { MODES, type GameState, type Mode } from "./global/types/GameTypes";
 
+// Updated manager data interface to match the new setup flow
+interface ManagerData {
+  // Basic manager info
+  name: string;
+  age: number;
+  nationality: string;
+  coachingStyle: string;
+  countryId: string;
+  countryFederation: string;
+  countryRank: number;
+  
+  // Setup selections
+  selectedCountries: string[];
+  selectedClub: any;
+}
 
 // Rotation Prompt Component
 function RotationPrompt() {
@@ -20,18 +35,20 @@ function RotationPrompt() {
   );
 }
 
-
 export default function App() {
   console.log('App component rendering'); // DEBUG LOG
   
   const [gameState, setGameState] = useState<GameState>("landing");
   const [isPortrait, setIsPortrait] = useState(false);
-  const [managerData, setManagerData] = useState({
-    name: "John Mwangi",
+  const [managerData, setManagerData] = useState<ManagerData>({
+    name: "",
     age: 35,
-    nationality: "Kenya",
+    nationality: "",
     coachingStyle: "Attacking",
-    selectedLeagues: [],
+    countryId: "",
+    countryFederation: "",
+    countryRank: 0,
+    selectedCountries: [],
     selectedClub: null,
   });
 
@@ -106,18 +123,30 @@ export default function App() {
     setGameState("managerSetup");
   };
 
-  const handleManagerSetupComplete = (data: SetStateAction<{ name: string; age: number; nationality: string; coachingStyle: string; selectedLeagues: never[]; selectedClub: null; }>) => {
-    setManagerData({ ...managerData, ...data });
+  const handleManagerSetupComplete = (data: any) => {
+    console.log('Manager setup complete:', data); // DEBUG LOG
+    setManagerData(prevData => ({ 
+      ...prevData, 
+      ...data 
+    }));
     setGameState("managerLeagueSelect");
   };
 
-  const handleLeagueSelectComplete = (selectedLeagues: any) => {
-    setManagerData({ ...managerData, selectedLeagues });
+  const handleLeagueSelectComplete = (selectedCountries: string[]) => {
+    console.log('League selection complete:', selectedCountries); // DEBUG LOG
+    setManagerData(prevData => ({ 
+      ...prevData, 
+      selectedCountries 
+    }));
     setGameState("managerClubSelect");
   };
 
   const handleClubSelectComplete = (selectedClub: any) => {
-    setManagerData({ ...managerData, selectedClub });
+    console.log('Club selection complete:', selectedClub); // DEBUG LOG
+    setManagerData(prevData => ({ 
+      ...prevData, 
+      selectedClub 
+    }));
     setGameState("loading");
     setTimeout(() => {
       setGameState("manager");
@@ -125,34 +154,51 @@ export default function App() {
   };
 
   console.log('Current gameState:', gameState); // DEBUG LOG
+  console.log('Current managerData:', managerData); // DEBUG LOG
+
+  // Show rotation prompt on mobile portrait
+  if (isPortrait && window.innerWidth < 768) {
+    return <RotationPrompt />;
+  }
 
   // Render with debug logs
   if (gameState === "landing") {
     console.log('Rendering LandingScreen'); // DEBUG LOG
     return <LandingScreen setGameState={setGameState} />;
   }
+  
   if (gameState === "modeSelect") {
     console.log('Rendering ModeSelection'); // DEBUG LOG
     return <ModeSelection setGameState={setGameState} onStartManager={handleStartManager} />;
   }
+  
   if (gameState === "managerSetup") {
     console.log('Rendering ManagerSetupScreen'); // DEBUG LOG
     return <ManagerSetupScreen onComplete={handleManagerSetupComplete} />;
   }
+  
   if (gameState === "managerLeagueSelect") {
     console.log('Rendering ManagerLeagueSelection'); // DEBUG LOG
     return <ManagerLeagueSelection onComplete={handleLeagueSelectComplete} />;
   }
+  
   if (gameState === "managerClubSelect") {
-    console.log('Rendering ManagerClubSelection'); // DEBUG LOG
-    return <ManagerClubSelection leagues={managerData.selectedLeagues} onComplete={handleClubSelectComplete} />;
+    console.log('Rendering ManagerClubSelection with countries:', managerData.selectedCountries); // DEBUG LOG
+    return (
+      <ManagerClubSelection 
+        selectedCountries={managerData.selectedCountries} 
+        onComplete={handleClubSelectComplete} 
+      />
+    );
   }
+  
   if (gameState === "loading") {
     console.log('Rendering LoadingScreen'); // DEBUG LOG
     return <LoadingScreen />;
   }
+  
   if (MODES.includes(gameState)) {
-    console.log('Rendering ModeHome'); // DEBUG LOG
+    console.log('Rendering ModeHome with manager data:', managerData); // DEBUG LOG
     return <ModeHome mode={gameState as Mode} setGameState={setGameState} managerData={managerData} />;
   }
   
