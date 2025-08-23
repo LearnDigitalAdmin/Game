@@ -1,0 +1,1171 @@
+// src/global/database/Save.tsx - Football Manager Game Database Handler
+import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { generateAllPlayers, type Player } from '../utils/PlayerGeneration';
+
+// ===== INTERFACES =====
+
+export interface SaveFile {
+  id: string;
+  name: string;
+  clubName: string;
+  managerName: string;
+  season: string;
+  gameDate: string;
+  lastPlayed: string;
+  createdAt: string;
+}
+
+export interface ClubData {
+  id: string;
+  name: string;
+  divisionId: string;
+  countryId: string;
+  rank: number;
+  status: 'pro' | 'semi-pro';
+  balance: 'rich' | 'average' | 'poor';
+  reputation: string;
+  boardConfidence: number;
+  fanSupport: number;
+  transferBudget: number;
+  wageBudget: number;
+  facilities: number;
+  training: number;
+  youth: number;
+}
+
+export interface ManagerData {
+  id: string;
+  name: string;
+  age: number;
+  nationality: string;
+  coachingStyle: string;
+  countryId: string;
+  countryFederation: string;
+  countryRank: number;
+  clubId: string;
+  contractLength: number;
+  salary: number;
+  reputation: number;
+  experience: number;
+}
+
+export interface Division {
+  id: string;
+  name: string;
+  countryId: string;
+  tier: number;
+  clubs: number;
+  season: string;
+  matchday: number;
+  status: 'active' | 'finished' | 'paused';
+}
+
+export interface LeagueTable {
+  id: string;
+  divisionId: string;
+  teamId: string;
+  teamName: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+  form: string;
+  position: number;
+  homeWon: number;
+  homeDrawn: number;
+  homeLost: number;
+  homeGoalsFor: number;
+  homeGoalsAgainst: number;
+  awayWon: number;
+  awayDrawn: number;
+  awayLost: number;
+  awayGoalsFor: number;
+  awayGoalsAgainst: number;
+}
+
+export interface Fixture {
+  id: string;
+  divisionId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  matchday: number;
+  date: string;
+  time: string;
+  status: 'scheduled' | 'live' | 'finished' | 'postponed';
+  homeScore: number | null;
+  awayScore: number | null;
+  attendance: number | null;
+  venue: string;
+  competition: string;
+}
+
+export interface Transfer {
+  id: string;
+  playerId: string;
+  fromClubId: string | null;
+  toClubId: string | null;
+  fee: number;
+  date: string;
+  type: 'permanent' | 'loan' | 'free' | 'release';
+  status: 'completed' | 'pending' | 'rejected';
+  contractLength: number;
+  wage: number;
+}
+
+export interface GameState {
+  currentDate: string;
+  currentSeason: string;
+  currentMatchday: number;
+  gameSpeed: 'paused' | 'slow' | 'normal' | 'fast';
+  autoSave: boolean;
+  notifications: any[];
+}
+
+// ===== DATABASE MANAGER CLASS =====
+
+export class FootballManagerDB {
+  private sqlite: SQLiteConnection;
+  private db: SQLiteDBConnection | null = null;
+  private dbName: string = '';
+  private isReady: boolean = false;
+
+  constructor() {
+    this.sqlite = new SQLiteConnection(CapacitorSQLite);
+  }
+
+  // ===== DATABASE INITIALIZATION =====
+
+  async initialize(): Promise<void> {
+  try {
+    // Simplified approach - just try to retrieve connection, create if it fails
+    try {
+      this.db = await this.sqlite.retrieveConnection("footballmanager", false);
+    } catch {
+      // Connection doesn't exist, create it
+      this.db = await this.sqlite.createConnection("footballmanager", false, "no-encryption", 1, false);
+    }
+    
+    await this.db.open();
+    await this.createTables();
+    this.isReady = true;
+    
+    console.log('Football Manager Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
+}
+
+  private async createTables(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const tables = [
+      // Save files metadata
+      `CREATE TABLE IF NOT EXISTS save_files (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        club_name TEXT NOT NULL,
+        manager_name TEXT NOT NULL,
+        season TEXT NOT NULL,
+        game_date TEXT NOT NULL,
+        last_played TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+
+      // Game state
+      `CREATE TABLE IF NOT EXISTS game_state (
+        id TEXT PRIMARY KEY DEFAULT 'main',
+        current_date TEXT NOT NULL,
+        current_season TEXT NOT NULL,
+        current_matchday INTEGER NOT NULL DEFAULT 1,
+        game_speed TEXT NOT NULL DEFAULT 'paused',
+        auto_save BOOLEAN NOT NULL DEFAULT 1,
+        notifications TEXT DEFAULT '[]'
+      )`,
+
+      // Manager data
+      `CREATE TABLE IF NOT EXISTS managers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        nationality TEXT NOT NULL,
+        coaching_style TEXT NOT NULL,
+        country_id TEXT NOT NULL,
+        country_federation TEXT NOT NULL,
+        country_rank INTEGER NOT NULL,
+        club_id TEXT NOT NULL,
+        contract_length INTEGER NOT NULL DEFAULT 2,
+        salary INTEGER NOT NULL DEFAULT 50000,
+        reputation INTEGER NOT NULL DEFAULT 50,
+        experience INTEGER NOT NULL DEFAULT 0
+      )`,
+
+      // Clubs data
+      `CREATE TABLE IF NOT EXISTS clubs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        division_id TEXT NOT NULL,
+        country_id TEXT NOT NULL,
+        rank INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pro', 'semi-pro')),
+        balance TEXT NOT NULL CHECK (balance IN ('rich', 'average', 'poor')),
+        reputation TEXT NOT NULL DEFAULT 'Local',
+        board_confidence INTEGER NOT NULL DEFAULT 75,
+        fan_support INTEGER NOT NULL DEFAULT 75,
+        transfer_budget INTEGER NOT NULL DEFAULT 1000000,
+        wage_budget INTEGER NOT NULL DEFAULT 500000,
+        facilities INTEGER NOT NULL DEFAULT 50,
+        training INTEGER NOT NULL DEFAULT 50,
+        youth INTEGER NOT NULL DEFAULT 50
+      )`,
+
+      // Divisions data
+      `CREATE TABLE IF NOT EXISTS divisions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        country_id TEXT NOT NULL,
+        tier INTEGER NOT NULL,
+        clubs INTEGER NOT NULL,
+        season TEXT NOT NULL,
+        matchday INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'finished', 'paused'))
+      )`,
+
+      // League tables
+      `CREATE TABLE IF NOT EXISTS league_tables (
+        id TEXT PRIMARY KEY,
+        division_id TEXT NOT NULL,
+        team_id TEXT NOT NULL,
+        team_name TEXT NOT NULL,
+        played INTEGER NOT NULL DEFAULT 0,
+        won INTEGER NOT NULL DEFAULT 0,
+        drawn INTEGER NOT NULL DEFAULT 0,
+        lost INTEGER NOT NULL DEFAULT 0,
+        goals_for INTEGER NOT NULL DEFAULT 0,
+        goals_against INTEGER NOT NULL DEFAULT 0,
+        goal_difference INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 0,
+        form TEXT NOT NULL DEFAULT '_____',
+        position INTEGER NOT NULL,
+        home_won INTEGER NOT NULL DEFAULT 0,
+        home_drawn INTEGER NOT NULL DEFAULT 0,
+        home_lost INTEGER NOT NULL DEFAULT 0,
+        home_goals_for INTEGER NOT NULL DEFAULT 0,
+        home_goals_against INTEGER NOT NULL DEFAULT 0,
+        away_won INTEGER NOT NULL DEFAULT 0,
+        away_drawn INTEGER NOT NULL DEFAULT 0,
+        away_lost INTEGER NOT NULL DEFAULT 0,
+        away_goals_for INTEGER NOT NULL DEFAULT 0,
+        away_goals_against INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(division_id, team_id)
+      )`,
+
+      // Players
+      `CREATE TABLE IF NOT EXISTS players (
+        id TEXT PRIMARY KEY,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        country_id TEXT NOT NULL,
+        club_id TEXT,
+        position TEXT NOT NULL,
+        secondary_position TEXT,
+        rating INTEGER NOT NULL,
+        potential INTEGER NOT NULL,
+        value INTEGER NOT NULL,
+        wage INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        weight INTEGER NOT NULL,
+        foot TEXT NOT NULL CHECK (foot IN ('Left', 'Right', 'Both')),
+        personality TEXT NOT NULL,
+        form INTEGER NOT NULL DEFAULT 70,
+        contract_end TEXT,
+        contract_type TEXT DEFAULT 'permanent',
+        morale INTEGER NOT NULL DEFAULT 75,
+        fitness INTEGER NOT NULL DEFAULT 100,
+        match_sharpness INTEGER NOT NULL DEFAULT 70
+      )`,
+
+      // Player injuries
+      `CREATE TABLE IF NOT EXISTS player_injuries (
+        id TEXT PRIMARY KEY,
+        player_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('Minor', 'Moderate', 'Major')),
+        duration INTEGER NOT NULL,
+        recurring BOOLEAN NOT NULL DEFAULT 0,
+        date_occurred TEXT NOT NULL,
+        FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
+      )`,
+
+      // Player history/stats
+      `CREATE TABLE IF NOT EXISTS player_history (
+        id TEXT PRIMARY KEY,
+        player_id TEXT NOT NULL,
+        season TEXT NOT NULL,
+        club_id TEXT NOT NULL,
+        appearances INTEGER NOT NULL DEFAULT 0,
+        goals INTEGER NOT NULL DEFAULT 0,
+        assists INTEGER NOT NULL DEFAULT 0,
+        yellow_cards INTEGER NOT NULL DEFAULT 0,
+        red_cards INTEGER NOT NULL DEFAULT 0,
+        minutes_played INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE,
+        UNIQUE(player_id, season)
+      )`,
+
+      // Fixtures
+      `CREATE TABLE IF NOT EXISTS fixtures (
+        id TEXT PRIMARY KEY,
+        division_id TEXT NOT NULL,
+        home_team_id TEXT NOT NULL,
+        away_team_id TEXT NOT NULL,
+        home_team_name TEXT NOT NULL,
+        away_team_name TEXT NOT NULL,
+        matchday INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'live', 'finished', 'postponed')),
+        home_score INTEGER,
+        away_score INTEGER,
+        attendance INTEGER,
+        venue TEXT NOT NULL,
+        competition TEXT NOT NULL DEFAULT 'league'
+      )`,
+
+      // Transfers
+      `CREATE TABLE IF NOT EXISTS transfers (
+        id TEXT PRIMARY KEY,
+        player_id TEXT NOT NULL,
+        from_club_id TEXT,
+        to_club_id TEXT,
+        fee INTEGER NOT NULL DEFAULT 0,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('permanent', 'loan', 'free', 'release')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('completed', 'pending', 'rejected')),
+        contract_length INTEGER NOT NULL DEFAULT 2,
+        wage INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (player_id) REFERENCES players (id) ON DELETE CASCADE
+      )`,
+
+      // Staff
+      `CREATE TABLE IF NOT EXISTS staff (
+        id TEXT PRIMARY KEY,
+        club_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        nationality TEXT NOT NULL,
+        rating INTEGER NOT NULL,
+        wage INTEGER NOT NULL,
+        contract_end TEXT NOT NULL
+      )`
+    ];
+
+    for (const table of tables) {
+      await this.db.execute(table);
+    }
+
+    // Create indexes for better performance
+    const indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_players_club ON players(club_id)',
+      'CREATE INDEX IF NOT EXISTS idx_players_position ON players(position)',
+      'CREATE INDEX IF NOT EXISTS idx_players_rating ON players(rating)',
+      'CREATE INDEX IF NOT EXISTS idx_league_tables_division ON league_tables(division_id)',
+      'CREATE INDEX IF NOT EXISTS idx_league_tables_points ON league_tables(division_id, points DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_fixtures_division ON fixtures(division_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fixtures_date ON fixtures(date)',
+      'CREATE INDEX IF NOT EXISTS idx_transfers_player ON transfers(player_id)',
+      'CREATE INDEX IF NOT EXISTS idx_transfers_date ON transfers(date)'
+    ];
+
+    for (const index of indexes) {
+      await this.db.execute(index);
+    }
+  }
+
+  // ===== SAVE FILE MANAGEMENT =====
+
+  async createSave(saveData: {
+  name: string;
+  managerData: any;
+  clubData: any;
+  selectedCountries: string[];
+}): Promise<string> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const saveId = `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const currentDate = new Date().toISOString();
+
+  try {
+    await this.db.execute('BEGIN TRANSACTION');
+
+    // Create save file record
+    await this.db.run(
+      `INSERT INTO save_files (id, name, club_name, manager_name, season, game_date, last_played, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [saveId, saveData.name, saveData.clubData.name, saveData.managerData.name, '2024-25', '2024-08-01', currentDate, currentDate]
+    );
+
+    // Initialize game state
+    await this.db.run(
+      `INSERT INTO game_state (current_date, current_season, current_matchday, game_speed, auto_save, notifications)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ['2024-08-01', '2024-25', 1, 'paused', 1, '[]']
+    );
+
+    // Create manager record
+    await this.db.run(
+      `INSERT INTO managers (id, name, age, nationality, coaching_style, country_id, country_federation, country_rank, club_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['manager_1', saveData.managerData.name, saveData.managerData.age, saveData.managerData.nationality, 
+       saveData.managerData.coachingStyle, saveData.managerData.countryId, saveData.managerData.countryFederation, 
+       saveData.managerData.countryRank, saveData.clubData.id]
+    );
+
+    // Load and insert all game data
+    await this.loadGameData(saveData.selectedCountries, saveData.clubData);
+    
+
+    await this.db.execute('COMMIT');
+    console.log(`Save file created: ${saveId}`);
+    return saveId;
+  } catch (error) {
+    await this.db.execute('ROLLBACK');
+    console.error('Error creating save:', error);
+    throw error;
+  }
+}
+
+  async loadSave(saveId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Update last played timestamp
+    await this.db.run(
+      'UPDATE save_files SET last_played = ? WHERE id = ?',
+      [new Date().toISOString(), saveId]
+    );
+
+    console.log(`Save loaded: ${saveId}`);
+  }
+
+  async getSaveFiles(): Promise<SaveFile[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query('SELECT * FROM save_files ORDER BY last_played DESC');
+    return result.values || [];
+  }
+
+  async deleteSave(saveId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    await this.db.run('DELETE FROM save_files WHERE id = ?', [saveId]);
+    console.log(`Save deleted: ${saveId}`);
+  }
+
+  // ===== GAME DATA LOADING =====
+
+  private async loadGameData(selectedCountries: string[], userClub: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Load countries data
+    const countriesData = await import('../../assets/countries.json');
+    const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
+
+    // Load divisions data
+    const divisionsData = await import('../../assets/divisions.json');
+    const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
+
+    // Load clubs data
+    const clubsData = await import('../../assets/clubs.json');
+    const clubs = clubsData.default.filter((c: any) => selectedCountries.includes(c.countryId));
+
+    // Load tables data
+    const tablesData = await import('../../assets/tables.json');
+
+    // Insert divisions
+    for (const division of divisions) {
+      await this.db.run(
+        `INSERT OR REPLACE INTO divisions (id, name, country_id, tier, clubs, season, matchday, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [division.id, division.name, division.countryId, division.tier, division.clubs, '2024-25', 1, 'active']
+      );
+    }
+
+    // Insert clubs
+    for (const club of clubs) {
+      const transferBudget = club.balance === 'rich' ? 5000000 : club.balance === 'average' ? 2000000 : 500000;
+      const wageBudget = Math.round(transferBudget * 0.6);
+
+      await this.db.run(
+        `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
+         reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
+         'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
+      );
+    }
+
+    // Insert league tables
+    Object.entries(tablesData.default).forEach(async ([divisionId, tableData]: [string, any]) => {
+      if (divisions.find(d => d.id === divisionId)) {
+        for (const [index, team] of tableData.table.entries()) {
+          await this.db!.run(
+            `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
+             goals_for, goals_against, goal_difference, points, form, position)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
+             team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
+          );
+        }
+      }
+    });
+
+    // Generate and insert players
+    console.log('Generating players...');
+    const playersData = await import('../../assets/players.json');
+    const players = generateAllPlayers(clubs, countries, playersData.default, {
+      playersPerClub: 25,
+      freeAgentCount: 100,
+      currentSeason: '2024-25',
+      injuryProbability: 0.15
+    });
+
+    for (const player of players) {
+      await this.db.run(
+        `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
+         rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
+         player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
+         player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
+         '2026-06-30', 75, 100, 70]
+      );
+
+      // Insert injuries if any
+      for (const injury of player.injuries) {
+        const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        await this.db.run(
+          `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
+        );
+      }
+    }
+
+    console.log('Game data loaded successfully');
+  }
+
+  // ===== LEAGUE TABLE OPERATIONS =====
+
+  async getLeagueTable(divisionId: string): Promise<LeagueTable[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM league_tables WHERE division_id = ? ORDER BY points DESC, goal_difference DESC, goals_for DESC',
+      [divisionId]
+    );
+    return result.values || [];
+  }
+
+  async updateLeagueTable(divisionId: string, teamId: string, updates: Partial<LeagueTable>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    values.push(divisionId, teamId);
+    
+    await this.db.run(
+      `UPDATE league_tables SET ${setParts.join(', ')} WHERE division_id = ? AND team_id = ?`,
+      values
+    );
+
+    // Recalculate positions after update
+    await this.recalculateTablePositions(divisionId);
+  }
+
+  async addMatchResult(divisionId: string, homeTeamId: string, awayTeamId: string, homeScore: number, awayScore: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      await this.db.execute('BEGIN TRANSACTION');
+
+      // Update home team stats
+      const homePoints = homeScore > awayScore ? 3 : homeScore === awayScore ? 1 : 0;
+      const homeResult = homeScore > awayScore ? 'W' : homeScore === awayScore ? 'D' : 'L';
+
+      await this.db.run(
+        `UPDATE league_tables SET 
+         played = played + 1,
+         won = won + ?,
+         drawn = drawn + ?,
+         lost = lost + ?,
+         goals_for = goals_for + ?,
+         goals_against = goals_against + ?,
+         goal_difference = goals_for - goals_against,
+         points = points + ?,
+         home_won = home_won + ?,
+         home_drawn = home_drawn + ?,
+         home_lost = home_lost + ?,
+         home_goals_for = home_goals_for + ?,
+         home_goals_against = home_goals_against + ?,
+         form = SUBSTR(form || ?, -5)
+         WHERE division_id = ? AND team_id = ?`,
+        [
+          homeScore > awayScore ? 1 : 0, // won
+          homeScore === awayScore ? 1 : 0, // drawn  
+          homeScore < awayScore ? 1 : 0, // lost
+          homeScore, awayScore, homePoints,
+          homeScore > awayScore ? 1 : 0, // home_won
+          homeScore === awayScore ? 1 : 0, // home_drawn
+          homeScore < awayScore ? 1 : 0, // home_lost
+          homeScore, awayScore, homeResult,
+          divisionId, homeTeamId
+        ]
+      );
+
+      // Update away team stats
+      const awayPoints = awayScore > homeScore ? 3 : awayScore === homeScore ? 1 : 0;
+      const awayResult = awayScore > homeScore ? 'W' : awayScore === homeScore ? 'D' : 'L';
+
+      await this.db.run(
+        `UPDATE league_tables SET 
+         played = played + 1,
+         won = won + ?,
+         drawn = drawn + ?,
+         lost = lost + ?,
+         goals_for = goals_for + ?,
+         goals_against = goals_against + ?,
+         goal_difference = goals_for - goals_against,
+         points = points + ?,
+         away_won = away_won + ?,
+         away_drawn = away_drawn + ?,
+         away_lost = away_lost + ?,
+         away_goals_for = away_goals_for + ?,
+         away_goals_against = away_goals_against + ?,
+         form = SUBSTR(form || ?, -5)
+         WHERE division_id = ? AND team_id = ?`,
+        [
+          awayScore > homeScore ? 1 : 0, // won
+          awayScore === homeScore ? 1 : 0, // drawn
+          awayScore < homeScore ? 1 : 0, // lost
+          awayScore, homeScore, awayPoints,
+          awayScore > homeScore ? 1 : 0, // away_won
+          awayScore === homeScore ? 1 : 0, // away_drawn
+          awayScore < homeScore ? 1 : 0, // away_lost
+          awayScore, homeScore, awayResult,
+          divisionId, awayTeamId
+        ]
+      );
+
+      await this.recalculateTablePositions(divisionId);
+      await this.db.execute('COMMIT');
+    } catch (error) {
+      await this.db.execute('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private async recalculateTablePositions(divisionId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const teams = await this.db.query(
+      'SELECT team_id FROM league_tables WHERE division_id = ? ORDER BY points DESC, goal_difference DESC, goals_for DESC',
+      [divisionId]
+    );
+
+    if (teams.values) {
+      for (let i = 0; i < teams.values.length; i++) {
+        await this.db.run(
+          'UPDATE league_tables SET position = ? WHERE division_id = ? AND team_id = ?',
+          [i + 1, divisionId, teams.values[i].team_id]
+        );
+      }
+    }
+  }
+
+  // ===== PLAYER OPERATIONS =====
+
+  async getClubPlayers(clubId: string): Promise<Player[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM players WHERE club_id = ? ORDER BY rating DESC, position ASC',
+      [clubId]
+    );
+    return result.values || [];
+  }
+
+  async getFreeAgents(): Promise<Player[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM players WHERE club_id IS NULL ORDER BY rating DESC',
+      []
+    );
+    return result.values || [];
+  }
+
+  async getPlayer(playerId: string): Promise<Player | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM players WHERE id = ?',
+      [playerId]
+    );
+    return result.values?.[0] || null;
+  }
+
+  async updatePlayer(playerId: string, updates: Partial<Player>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    values.push(playerId);
+    
+    await this.db.run(
+      `UPDATE players SET ${setParts.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+
+  async transferPlayer(playerId: string, fromClubId: string | null, toClubId: string | null, fee: number, wage: number, contractLength: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    try {
+      await this.db.execute('BEGIN TRANSACTION');
+
+      // Update player's club
+      await this.db.run(
+        'UPDATE players SET club_id = ?, wage = ?, contract_end = ? WHERE id = ?',
+        [toClubId, wage, this.calculateContractEnd(contractLength), playerId]
+      );
+
+      // Create transfer record
+      const transferId = `transfer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await this.db.run(
+        `INSERT INTO transfers (id, player_id, from_club_id, to_club_id, fee, date, type, status, contract_length, wage)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [transferId, playerId, fromClubId, toClubId, fee, new Date().toISOString().split('T')[0], 'permanent', 'completed', contractLength, wage]
+      );
+
+      // Update club budgets if applicable
+      if (toClubId) {
+        await this.db.run(
+          'UPDATE clubs SET transfer_budget = transfer_budget - ?, wage_budget = wage_budget - ? WHERE id = ?',
+          [fee, wage * 52, toClubId]
+        );
+      }
+
+      if (fromClubId) {
+        await this.db.run(
+          'UPDATE clubs SET transfer_budget = transfer_budget + ?, wage_budget = wage_budget + ? WHERE id = ?',
+          [fee, wage * 52, fromClubId]
+        );
+      }
+
+      await this.db.execute('COMMIT');
+    } catch (error) {
+      await this.db.execute('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private calculateContractEnd(years: number): string {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() + years);
+    date.setMonth(5); // June (0-indexed)
+    date.setDate(30);
+    return date.toISOString().split('T')[0];
+  }
+
+  // ===== FIXTURE OPERATIONS =====
+
+  async getFixtures(divisionId?: string, limit?: number): Promise<Fixture[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let query = 'SELECT * FROM fixtures';
+    let params: any[] = [];
+
+    if (divisionId) {
+      query += ' WHERE division_id = ?';
+      params.push(divisionId);
+    }
+
+    query += ' ORDER BY date ASC, time ASC';
+
+    if (limit) {
+      query += ' LIMIT ?';
+      params.push(limit);
+    }
+
+    const result = await this.db.query(query, params);
+    return result.values || [];
+  }
+
+  async getUpcomingFixtures(clubId: string, limit: number = 5): Promise<Fixture[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      `SELECT * FROM fixtures 
+       WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'scheduled'
+       ORDER BY date ASC, time ASC LIMIT ?`,
+      [clubId, clubId, limit]
+    );
+    return result.values || [];
+  }
+
+  async updateFixture(fixtureId: string, updates: Partial<Fixture>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    values.push(fixtureId);
+    
+    await this.db.run(
+      `UPDATE fixtures SET ${setParts.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+
+  // ===== CLUB OPERATIONS =====
+
+  async getClub(clubId: string): Promise<ClubData | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM clubs WHERE id = ?',
+      [clubId]
+    );
+    return result.values?.[0] || null;
+  }
+
+  async updateClub(clubId: string, updates: Partial<ClubData>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    values.push(clubId);
+    
+    await this.db.run(
+      `UPDATE clubs SET ${setParts.join(', ')} WHERE id = ?`,
+      values
+    );
+  }
+
+  async getClubsByDivision(divisionId: string): Promise<ClubData[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM clubs WHERE division_id = ? ORDER BY rank ASC',
+      [divisionId]
+    );
+    return result.values || [];
+  }
+
+  // ===== MANAGER OPERATIONS =====
+
+  async getManager(): Promise<ManagerData | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM managers LIMIT 1',
+      []
+    );
+    return result.values?.[0] || null;
+  }
+
+  async updateManager(updates: Partial<ManagerData>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    await this.db.run(
+      `UPDATE managers SET ${setParts.join(', ')} WHERE id = 'manager_1'`,
+      values
+    );
+  }
+
+  // ===== GAME STATE OPERATIONS =====
+
+  async getGameState(): Promise<GameState | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM game_state WHERE id = "main"',
+      []
+    );
+    return result.values?.[0] || null;
+  }
+
+  async updateGameState(updates: Partial<GameState>): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const setParts: string[] = [];
+    const values: any[] = [];
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined) {
+        setParts.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+        values.push(typeof value === 'object' ? JSON.stringify(value) : value);
+      }
+    });
+
+    if (setParts.length === 0) return;
+
+    await this.db.run(
+      `UPDATE game_state SET ${setParts.join(', ')} WHERE id = 'main'`,
+      values
+    );
+  }
+
+  // ===== SEARCH OPERATIONS =====
+
+  async searchPlayers(query: string, clubId?: string, position?: string, minRating?: number, maxValue?: number): Promise<Player[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let sql = `SELECT * FROM players WHERE (first_name LIKE ? OR last_name LIKE ?)`;
+    let params: any[] = [`%${query}%`, `%${query}%`];
+
+    if (clubId) {
+      sql += ` AND club_id = ?`;
+      params.push(clubId);
+    }
+
+    if (position) {
+      sql += ` AND (position = ? OR secondary_position = ?)`;
+      params.push(position, position);
+    }
+
+    if (minRating) {
+      sql += ` AND rating >= ?`;
+      params.push(minRating);
+    }
+
+    if (maxValue) {
+      sql += ` AND value <= ?`;
+      params.push(maxValue);
+    }
+
+    sql += ` ORDER BY rating DESC LIMIT 50`;
+
+    const result = await this.db.query(sql, params);
+    return result.values || [];
+  }
+
+  async getPlayerStats(playerId: string, season?: string): Promise<any> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let query = 'SELECT * FROM player_history WHERE player_id = ?';
+    let params: any[] = [playerId];
+
+    if (season) {
+      query += ' AND season = ?';
+      params.push(season);
+    }
+
+    query += ' ORDER BY season DESC';
+
+    const result = await this.db.query(query, params);
+    return result.values || [];
+  }
+
+  // ===== DIVISION OPERATIONS =====
+
+  async getDivisions(countryId?: string): Promise<Division[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let query = 'SELECT * FROM divisions';
+    let params: any[] = [];
+
+    if (countryId) {
+      query += ' WHERE country_id = ?';
+      params.push(countryId);
+    }
+
+    query += ' ORDER BY tier ASC';
+
+    const result = await this.db.query(query, params);
+    return result.values || [];
+  }
+
+  // ===== STAFF OPERATIONS =====
+
+  async getClubStaff(clubId: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      'SELECT * FROM staff WHERE club_id = ? ORDER BY role ASC',
+      [clubId]
+    );
+    return result.values || [];
+  }
+
+  async addStaff(clubId: string, staffData: any): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const staffId = `staff_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await this.db.run(
+      `INSERT INTO staff (id, club_id, name, role, age, nationality, rating, wage, contract_end)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [staffId, clubId, staffData.name, staffData.role, staffData.age, staffData.nationality, 
+       staffData.rating, staffData.wage, staffData.contractEnd]
+    );
+  }
+
+  // ===== TRANSFER OPERATIONS =====
+
+  async getTransfers(clubId?: string, status?: string): Promise<Transfer[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    let query = 'SELECT * FROM transfers';
+    let params: any[] = [];
+    const conditions: string[] = [];
+
+    if (clubId) {
+      conditions.push('(from_club_id = ? OR to_club_id = ?)');
+      params.push(clubId, clubId);
+    }
+
+    if (status) {
+      conditions.push('status = ?');
+      params.push(status);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ' ORDER BY date DESC';
+
+    const result = await this.db.query(query, params);
+    return result.values || [];
+  }
+
+  // ===== UTILITY OPERATIONS =====
+
+  async executeCustomQuery(query: string, params: any[] = []): Promise<any> {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    try {
+      if (query.trim().toLowerCase().startsWith('select')) {
+        const result = await this.db.query(query, params);
+        return result.values || [];
+      } else {
+        await this.db.run(query, params);
+        return true;
+      }
+    } catch (error) {
+      console.error('Custom query error:', error);
+      throw error;
+    }
+  }
+
+  async getDatabaseStats(): Promise<any> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stats = {
+      totalPlayers: 0,
+      totalClubs: 0,
+      totalDivisions: 0,
+      totalTransfers: 0,
+      totalFixtures: 0
+    };
+
+    try {
+      const playerCount = await this.db.query('SELECT COUNT(*) as count FROM players');
+      stats.totalPlayers = playerCount.values?.[0]?.count || 0;
+
+      const clubCount = await this.db.query('SELECT COUNT(*) as count FROM clubs');
+      stats.totalClubs = clubCount.values?.[0]?.count || 0;
+
+      const divisionCount = await this.db.query('SELECT COUNT(*) as count FROM divisions');
+      stats.totalDivisions = divisionCount.values?.[0]?.count || 0;
+
+      const transferCount = await this.db.query('SELECT COUNT(*) as count FROM transfers');
+      stats.totalTransfers = transferCount.values?.[0]?.count || 0;
+
+      const fixtureCount = await this.db.query('SELECT COUNT(*) as count FROM fixtures');
+      stats.totalFixtures = fixtureCount.values?.[0]?.count || 0;
+    } catch (error) {
+      console.error('Error getting database stats:', error);
+    }
+
+    return stats;
+  }
+
+  // ===== CLEANUP =====
+
+  async close(): Promise<void> {
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+      this.isReady = false;
+      console.log('Database connection closed');
+    }
+  }
+
+  get ready(): boolean {
+    return this.isReady;
+  }
+}
+
+// ===== SINGLETON INSTANCE =====
+
+export const gameDB = new FootballManagerDB();

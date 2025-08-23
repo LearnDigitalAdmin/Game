@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { LandingScreen } from "./global/screens/LandingScreen";
 import { ModeSelection } from "./global/screens/ModeSelection";
-import { LoadingScreen } from "./global/screens/LoadingScreen";
 import { ManagerSetupScreen } from "./manager/setup/ManagerSetupScreen";
 import { ManagerLeagueSelection } from "./manager/setup/ManagerLeagueSelection";
 import { ManagerClubSelection } from "./manager/setup/ManagerClubSelection";
-import { ModeHome } from "./global/layout/ModeHome";
+import { gameDB } from "./global/database/Save";
 import { MODES, type GameState, type Mode } from "./global/types/GameTypes";
+import { ModeHome } from "./global/layout/ModeHome";
 
 // Updated manager data interface to match the new setup flow
 interface ManagerData {
@@ -40,6 +40,10 @@ export default function App() {
   
   const [gameState, setGameState] = useState<GameState>("landing");
   const [isPortrait, setIsPortrait] = useState(false);
+  const [dbInitialized, setDbInitialized] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [currentSaveId, setCurrentSaveId] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState("Initializing...");
   const [managerData, setManagerData] = useState<ManagerData>({
     name: "",
     age: 35,
@@ -51,6 +55,23 @@ export default function App() {
     selectedCountries: [],
     selectedClub: null,
   });
+
+  // Initialize database on app start
+  useEffect(() => {
+    const initDatabase = async () => {
+      try {
+        console.log('Initializing Football Manager Database...');
+        await gameDB.initialize();
+        setDbInitialized(true);
+        console.log('Database initialized successfully');
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        setDbError('Failed to initialize game database. Please refresh and try again.');
+      }
+    };
+
+    initDatabase();
+  }, []);
 
   // Force landscape orientation using Screen Orientation API and fallback methods
   useEffect(() => {
@@ -141,24 +162,85 @@ export default function App() {
     setGameState("managerClubSelect");
   };
 
-  const handleClubSelectComplete = (selectedClub: any) => {
+  const handleClubSelectComplete = async (selectedClub: any) => {
     console.log('Club selection complete:', selectedClub); // DEBUG LOG
-    setManagerData(prevData => ({ 
-      ...prevData, 
-      selectedClub 
-    }));
+    
+    const updatedManagerData = {
+      ...managerData,
+      selectedClub
+    };
+    
+    setManagerData(updatedManagerData);
     setGameState("loading");
-    setTimeout(() => {
-      setGameState("manager");
-    }, 2000);
+    
+    try {
+      // Create the save file with all data generation
+      setLoadingMessage("Creating save file...");
+      
+      const saveId = await gameDB.createSave({
+        name: `${selectedClub.name} Save`,
+        managerData: updatedManagerData,
+        clubData: selectedClub,
+        selectedCountries: updatedManagerData.selectedCountries
+      });
+      
+      setCurrentSaveId(saveId);
+      setLoadingMessage("Loading game data...");
+      
+      // Load the save
+      await gameDB.loadSave(saveId);
+      
+      setLoadingMessage("Starting game...");
+      
+      // Short delay for UX
+      setTimeout(() => {
+        setGameState("manager");
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error creating save:', error);
+      setDbError('Failed to create save file. Please try again.');
+      setGameState("managerClubSelect");
+    }
   };
 
   console.log('Current gameState:', gameState); // DEBUG LOG
   console.log('Current managerData:', managerData); // DEBUG LOG
 
+  // Show database error if any
+  if (dbError) {
+    return (
+      <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center p-6 bg-red-900/60 border border-red-500/50 rounded-xl shadow-xl max-w-md">
+          <h2 className="text-xl font-bold mb-4 text-red-200">Database Error</h2>
+          <p className="text-red-300 mb-4">{dbError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 font-semibold text-sm"
+          >
+            Reload App
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Show rotation prompt on mobile portrait
   if (isPortrait && window.innerWidth < 768) {
     return <RotationPrompt />;
+  }
+
+  // Wait for database to initialize before showing any game screens
+  if (!dbInitialized) {
+    return (
+      <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-lg">Initializing Football Manager...</p>
+          <p className="text-sm text-slate-400 mt-2">Setting up database and game engine</p>
+        </div>
+      </div>
+    );
   }
 
   // Render with debug logs
@@ -193,13 +275,40 @@ export default function App() {
   }
   
   if (gameState === "loading") {
-    console.log('Rendering LoadingScreen'); // DEBUG LOG
-    return <LoadingScreen />;
+    console.log('Rendering LoadingScreen with message:', loadingMessage); // DEBUG LOG
+    return (
+      <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold mb-2">Setting up your career</h2>
+          <p className="text-lg text-slate-300 mb-4">{loadingMessage}</p>
+          <div className="max-w-md">
+            <div className="bg-slate-800/60 rounded-lg p-4">
+              <h3 className="font-semibold mb-2">Generating:</h3>
+              <ul className="text-sm text-slate-400 space-y-1">
+                <li>• Player database ({loadingMessage.includes('Creating') ? 'In progress...' : 'Complete'})</li>
+                <li>• League tables ({loadingMessage.includes('Loading') ? 'In progress...' : 'Complete'})</li>
+                <li>• Club finances ({loadingMessage.includes('Loading') ? 'In progress...' : 'Complete'})</li>
+                <li>• Match fixtures ({loadingMessage.includes('Starting') ? 'In progress...' : 'Complete'})</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
   
   if (MODES.includes(gameState)) {
-    console.log('Rendering ModeHome with manager data:', managerData); // DEBUG LOG
-    return <ModeHome mode={gameState as Mode} setGameState={setGameState} managerData={managerData} />;
+    console.log('Rendering ModeHome with manager data and database:', managerData); // DEBUG LOG
+    return (
+      <ModeHome 
+        mode={gameState as Mode} 
+        setGameState={setGameState} 
+        managerData={managerData}
+        database={gameDB}
+        saveId={currentSaveId}
+      />
+    );
   }
   
   console.log('No matching gameState, returning null'); // DEBUG LOG

@@ -1,72 +1,3 @@
-// //module - global/layout/ModeHome.tsx
-// import { useState, useMemo } from "react";
-// import { Sidebar } from "../sidebar/Sidebar";
-// import { getSidebarConfig, labelFromKey } from "../sidebar/SidebarConfig";
-// import type { Mode } from "../types/GameTypes";
-// import { PlayerPages } from "../../player/pages/PlayerPages";
-// import { ManagerPages } from "../../manager/pages/ManagerPages";
-// import { OwnerPages } from "../../owner/pages/OwnerPages";
-
-// export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setGameState: any; managerData: any }) {
-//   const [collapsed, setCollapsed] = useState(false);
-//   const [activeKey, setActiveKey] = useState<string>("home");
-
-//   const config = useMemo(() => getSidebarConfig(mode), [mode]);
-//     if (!config) {
-//     return <div>Error: unable to load sidebar config</div>;
-//     }
-
-//     const { items, header, palette } = config;
-
-//   return (
-//     <div className="w-screen h-screen bg-slate-100 flex overflow-hidden">
-//       <Sidebar
-//         mode={mode}
-//         header={header}
-//         items={items}
-//         palette={palette}
-//         collapsed={collapsed}
-//         onToggle={() => setCollapsed((c) => !c)}
-//         activeKey={activeKey}
-//         onSelect={setActiveKey}
-//       />
-
-//       <div className="flex-1 h-full overflow-auto">
-//         <div className="h-14 border-b bg-white/70 backdrop-blur flex items-center justify-between px-4">
-//           <div className="flex items-center gap-2">
-//             <span className={`w-2 h-2 rounded-full ${palette.dot}`} />
-//             <span className="text-slate-700 font-semibold capitalize">{mode} mode</span>
-//             <span className="text-slate-400">/</span>
-//             <span className="text-slate-500">{labelFromKey(activeKey)}</span>
-//           </div>
-//           <div className="flex items-center gap-2">
-//             <button
-//               className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50"
-//               onClick={() => setGameState("landing")}
-//             >
-//               Exit to Main Menu
-//             </button>
-//           </div>
-//         </div>
-
-//         <div className="p-6 grid grid-cols-12 gap-6">
-//           <ModePage mode={mode} page={activeKey} palette={palette} managerData={managerData} />
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// function ModePage({ mode, page, palette, managerData }: { mode: Mode; page: string; palette: any; managerData: any }) {
-//   switch (mode) {
-//     case "player":
-//       return <PlayerPages page={page} palette={palette} />;
-//     case "manager":
-//       return <ManagerPages page={page} palette={palette} managerData={managerData} />;
-//     case "owner":
-//       return <OwnerPages page={page} palette={palette} />;
-//   }
-// }
 import { useState, useMemo } from "react";
 import { Sidebar } from "../sidebar/Sidebar";
 import { getSidebarConfig, labelFromKey } from "../sidebar/SidebarConfig";
@@ -75,13 +6,27 @@ import { PlayerPages } from "../../player/pages/PlayerPages";
 import { ManagerPages } from "../../manager/pages/ManagerPages";
 import { OwnerPages } from "../../owner/pages/OwnerPages";
 import { Modal, LoadingSpinner } from "../components/Modal";
+import { FootballManagerDB } from "../database/Save";
 
-export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setGameState: any; managerData: any }) {
+export function ModeHome({ 
+  mode, 
+  setGameState, 
+  managerData, 
+  database, 
+  saveId 
+}: { 
+  mode: Mode; 
+  setGameState: any; 
+  managerData: any;
+  database: FootballManagerDB;
+  saveId: string | null;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [activeKey, setActiveKey] = useState<string>("home");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [currentDate, setCurrentDate] = useState("August 1, 2024");
 
   const config = useMemo(() => getSidebarConfig(mode), [mode]);
   if (!config) {
@@ -92,20 +37,71 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
 
   const handleSave = async () => {
     setSaving(true);
-    // Simulate save operation
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      // Update save file timestamp
+      if (saveId) {
+        await database.updateGameState({
+          currentDate: new Date().toISOString().split('T')[0]
+        });
+      }
+      
+      // Simulate save operation for UX
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      console.log('Game saved successfully');
+    } catch (error) {
+      console.error('Error saving game:', error);
+    }
     setSaving(false);
     setShowSaveModal(false);
   };
 
-  const handleExit = () => {
+  const handleExit = async () => {
+    try {
+      // Auto-save before exit
+      if (saveId) {
+        await database.updateGameState({
+          currentDate: new Date().toISOString().split('T')[0]
+        });
+      }
+      
+      // Close database connection
+      await database.close();
+    } catch (error) {
+      console.error('Error during exit:', error);
+    }
+    
     setGameState("landing");
     setShowExitModal(false);
   };
 
-  const handleNextDay = () => {
-    // Simulate next day progression
-    console.log("Advancing to next day...");
+  const handleNextDay = async () => {
+    try {
+      console.log("Advancing to next day...");
+      
+      // Get current game state
+      const gameState = await database.getGameState();
+      if (gameState) {
+        const currentDate = new Date(gameState.currentDate);
+        currentDate.setDate(currentDate.getDate() + 1);
+        
+        // Update game state
+        await database.updateGameState({
+          currentDate: currentDate.toISOString().split('T')[0]
+        });
+        
+        // Update display date
+        setCurrentDate(currentDate.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }));
+        
+        console.log(`Advanced to: ${currentDate.toISOString().split('T')[0]}`);
+      }
+    } catch (error) {
+      console.error('Error advancing day:', error);
+    }
   };
 
   return (
@@ -124,7 +120,7 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
       />
 
       <div className="flex-1 h-full overflow-auto">
-        {/* Updated Header with FL Branding */}
+        {/* Updated Header with FL Branding and Game Info */}
         <div className="h-14 border-b bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-500 backdrop-blur flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             {/* FL Brand Logo */}
@@ -137,13 +133,16 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
             
             <div className="flex items-center gap-2 text-white">
               <span className="w-2 h-2 rounded-full bg-white/80" />
-              <span className="font-semibold capitalize">{mode} mode</span>
-              <span className="text-white/70">/</span>
-              <span className="text-white/90">{labelFromKey(activeKey)}</span>
+              <span className="font-semibold">{managerData.selectedClub?.name || 'Football Club'}</span>
+              <span className="text-white/70">•</span>
+              <span className="text-white/90 text-sm">{currentDate}</span>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
+            <span className="text-white/80 text-sm mr-2">
+              {labelFromKey(activeKey)}
+            </span>
             <button
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-white font-semibold shadow-lg transition-all duration-200"
               onClick={handleNextDay}
@@ -154,7 +153,13 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
         </div>
 
         <div className="p-6 grid grid-cols-12 gap-6">
-          <ModePage mode={mode} page={activeKey} palette={palette} managerData={managerData} />
+          <ModePage 
+            mode={mode} 
+            page={activeKey} 
+            palette={palette} 
+            managerData={managerData}
+            database={database}
+          />
         </div>
       </div>
 
@@ -165,10 +170,29 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
         title="Save Game"
       >
         {saving ? (
-          <LoadingSpinner />
+          <div className="text-center">
+            <LoadingSpinner />
+            <p className="mt-4 text-slate-600">Saving your progress...</p>
+          </div>
         ) : (
           <div>
             <p className="mb-4">Save your current progress to continue later.</p>
+            <div className="bg-slate-50 rounded-lg p-3 mb-4">
+              <div className="grid grid-cols-2 gap-4 text-xs text-slate-600">
+                <div>
+                  <span className="text-slate-500">Club:</span> {managerData.selectedClub?.name}
+                </div>
+                <div>
+                  <span className="text-slate-500">Manager:</span> {managerData.name}
+                </div>
+                <div>
+                  <span className="text-slate-500">Date:</span> {currentDate}
+                </div>
+                <div>
+                  <span className="text-slate-500">Save ID:</span> {saveId?.slice(-8)}
+                </div>
+              </div>
+            </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowSaveModal(false)}
@@ -194,7 +218,12 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
         title="Exit Game"
       >
         <div>
-          <p className="mb-4">Are you sure you want to exit to the main menu? Any unsaved progress will be lost.</p>
+          <p className="mb-4">Are you sure you want to exit to the main menu? Your progress will be auto-saved.</p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+            <p className="text-amber-800 text-sm">
+              <strong>Note:</strong> Your game will be automatically saved before exiting.
+            </p>
+          </div>
           <div className="flex justify-end gap-3">
             <button
               onClick={() => setShowExitModal(false)}
@@ -206,7 +235,7 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
               onClick={handleExit}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-red-600 to-red-700 text-white hover:from-red-500 hover:to-red-600 transition-all duration-200"
             >
-              Exit Game
+              Save & Exit
             </button>
           </div>
         </div>
@@ -215,12 +244,24 @@ export function ModeHome({ mode, setGameState, managerData }: { mode: Mode; setG
   );
 }
 
-function ModePage({ mode, page, palette, managerData }: { mode: Mode; page: string; palette: any; managerData: any }) {
+function ModePage({ 
+  mode, 
+  page, 
+  palette, 
+  managerData, 
+  database 
+}: { 
+  mode: Mode; 
+  page: string; 
+  palette: any; 
+  managerData: any;
+  database: FootballManagerDB;
+}) {
   switch (mode) {
     case "player":
       return <PlayerPages page={page} palette={palette} />;
     case "manager":
-      return <ManagerPages page={page} palette={palette} managerData={managerData} />;
+      return <ManagerPages page={page} palette={palette} managerData={managerData} database={database} />;
     case "owner":
       return <OwnerPages page={page} palette={palette} />;
   }

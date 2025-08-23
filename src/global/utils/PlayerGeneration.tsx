@@ -60,8 +60,8 @@ interface Club {
   divisionId: string;
   countryId: string;
   rank: number;
-  status: 'pro' | 'semi-pro';
-  balance: 'rich' | 'average' | 'poor';
+  status: string;
+  balance: string;
 }
 
 interface Country {
@@ -297,10 +297,11 @@ function calculateWage(rating: number, club: Club): number {
   
   // Club balance modifier
   const balanceModifier = {
-    rich: 1.4,
-    average: 1.0,
-    poor: 0.7
-  }[club.balance];
+  rich: 1.4,
+  average: 1.0,
+  poor: 0.7,
+  default: 1.0 // add a default value
+}[club.balance] || 1.0; // use the default value if club.balance is not found
   
   // Professional vs semi-professional
   const statusModifier = club.status === 'pro' ? 1.0 : 0.6;

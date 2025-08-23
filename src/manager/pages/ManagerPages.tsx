@@ -7,8 +7,19 @@ import { ClubPanel } from "../club/ClubPanel";
 import { FixturesPanel } from "../fixtures/FixturesPanel";
 import { TacticsPanel } from "../tactics/TacticsPanel";
 import { TransfersPanel } from "../transfers/TransfersPanel";
+import { FootballManagerDB } from "../../global/database/Save";
 
-export function ManagerPages({ page, palette, managerData }: { page: string; palette: any; managerData: any }) {
+export function ManagerPages({ 
+  page, 
+  palette, 
+  managerData, 
+  database 
+}: { 
+  page: string; 
+  palette: any; 
+  managerData: any;
+  database: FootballManagerDB;
+}) {
   const Header = ({ title, subtitle }: { title: string; subtitle: string }) => (
     <div className="col-span-12">
       <div className="flex items-center justify-between">
@@ -27,7 +38,7 @@ export function ManagerPages({ page, palette, managerData }: { page: string; pal
     return (
       <>
         <Header title="Squad" subtitle="Depth & fitness" />
-        <SquadPanel/>
+        <SquadPanel database={database} managerData={managerData} />
       </>
     );
   if (page === "tactics")
@@ -41,21 +52,21 @@ export function ManagerPages({ page, palette, managerData }: { page: string; pal
     return (
       <>
         <Header title="Transfers" subtitle="Targets & budget" />
-        <TransfersPanel/>
+        <TransfersPanel database={database} managerData={managerData} />
       </>
     );
   if (page === "matches")
     return (
       <>
         <Header title="Matches" subtitle="Fixtures & results" />
-        <FixturesPanel managerData={managerData} />
+        <FixturesPanel managerData={managerData} database={database} />
       </>
     );
   if (page === "club")
     return (
       <>
         <Header title="Club" subtitle="Identity & staff" />
-        <ClubPanel/>
+        <ClubPanel database={database} managerData={managerData} />
       </>
     );
   if (page === "settings")
@@ -69,7 +80,7 @@ export function ManagerPages({ page, palette, managerData }: { page: string; pal
   return (
     <>
       <Header title="Manager Dashboard" subtitle="Form • Morale • Board" />
-      <ManagerDashboard palette={palette} />
+      <ManagerDashboard palette={palette} database={database} managerData={managerData} />
     </>
   );
 }
