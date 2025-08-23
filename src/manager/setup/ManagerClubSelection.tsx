@@ -1,4 +1,3 @@
-
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Check, Star } from "lucide-react";
@@ -52,16 +51,25 @@ interface ClubWithDetails extends Club {
 }
 
 export function ManagerClubSelection({ 
-  selectedCountries, 
+  selectedCountries = [], 
   onComplete 
 }: { 
-  selectedCountries: string[], 
+  selectedCountries?: string[], 
   onComplete: (club: ClubWithDetails) => void 
 }) {
   const [activeDivision, setActiveDivision] = useState("");
   const [selectedClub, setSelectedClub] = useState<ClubWithDetails | null>(null);
 
   const { availableClubs, divisionsByCountry, countries } = useMemo(() => {
+    // Early return if no countries selected
+    if (!selectedCountries || selectedCountries.length === 0) {
+      return {
+        availableClubs: [],
+        divisionsByCountry: {},
+        countries: {}
+      };
+    }
+
     const clubs = clubsData as Club[];
     const divisions = divisionsData as Division[];
     const countriesMap = (countriesData as Country[]).reduce((acc, country) => {
@@ -130,7 +138,7 @@ export function ManagerClubSelection({
     setActiveDivision(allDivisions[0].id);
   }
 
-  if (selectedCountries.length === 0) {
+  if (!selectedCountries || selectedCountries.length === 0) {
     return (
       <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center p-6 bg-slate-800/60 border border-white/10 rounded-xl shadow-xl max-w-md">
@@ -152,9 +160,9 @@ export function ManagerClubSelection({
   // Dynamic grid with scroll fallback
   const getClubGridCols = (itemCount: number) => {
     if (itemCount <= 4) return 'grid-cols-4';
-    if (itemCount <= 6) return 'grid-cols-5';
-    if (itemCount <= 8) return 'grid-cols-5';
-    return 'grid-cols-5';
+    if (itemCount <= 6) return 'grid-cols-6';
+    if (itemCount <= 8) return 'grid-cols-8';
+    return 'grid-cols-6';
   };
 
   const clubsNeedScroll = clubsInDivision.length > 8;

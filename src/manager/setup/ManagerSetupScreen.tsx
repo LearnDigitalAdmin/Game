@@ -1,5 +1,3 @@
-
-
 import { useState, useEffect } from "react";
 
 // Import JSON data
@@ -97,7 +95,7 @@ export function ManagerSetupScreen({ onComplete }: { onComplete: (data: any) => 
     }
   };
 
-    if (countries.length === 0) {
+  if (countries.length === 0) {
     return (
       <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
@@ -105,8 +103,8 @@ export function ManagerSetupScreen({ onComplete }: { onComplete: (data: any) => 
           <p>Loading manager setup...</p>
         </div>
       </div>
-    );
-  }
+  )};
+  
 
   return (
     <div className="w-screen h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
@@ -211,6 +209,12 @@ export function ManagerSetupScreen({ onComplete }: { onComplete: (data: any) => 
               <div className="bg-slate-700/30 rounded-lg p-3 mt-4">
                 <h4 className="text-sm font-medium text-slate-300 mb-2">Manager Summary</h4>
                 <div className="grid grid-cols-2 gap-4 text-xs text-slate-400">
+                  <div>
+                    <span className="text-slate-500">Name:</span> {formData.name || 'Not set'}
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Age:</span> {formData.age} years old
+                  </div>
                   <div>
                     <span className="text-slate-500">From:</span> {formData.nationality}
                   </div>
