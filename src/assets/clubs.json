@@ -1,0 +1,1204 @@
+[
+  {
+    "id": "GOR",
+    "name": "Gor Mahia",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 1,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "TUS",
+    "name": "Tusker FC",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 2,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "AFC",
+    "name": "AFC Leopards",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 3,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "ULI",
+    "name": "Ulinzi Stars",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 4,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "BAN",
+    "name": "Bandari FC",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 5,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "KCB",
+    "name": "KCB",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 6,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "SOF",
+    "name": "Sofapaka",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 7,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "SHA",
+    "name": "Kariobangi Sharks",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 8,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "POS",
+    "name": "Posta Rangers",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 9,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NZO",
+    "name": "Nzoia Sugar",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 10,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MAT",
+    "name": "Mathare United",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 11,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "VHI",
+    "name": "Vihiga Bullets",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 12,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "WAZ",
+    "name": "Wazito FC",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 13,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NAI",
+    "name": "Nairobi City Stars",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 14,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KIS",
+    "name": "Kisumu All Stars",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 15,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "TAL",
+    "name": "Talanta FC",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 16,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MOU",
+    "name": "Mount Kenya United",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 17,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "THI",
+    "name": "Thika United",
+    "divisionId": "KEN1",
+    "countryId": "KEN",
+    "rank": 18,
+    "status": "pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "SHA2",
+    "name": "Shabana FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 1,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KAK",
+    "name": "Kakamega Homeboyz",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 2,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "STJ",
+    "name": "St. Joseph Youth",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 3,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MOD",
+    "name": "Modern Coast Rangers",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 4,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "GUS",
+    "name": "Gusii FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 5,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NAZ",
+    "name": "Nakuru AllStars",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 6,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "EGY",
+    "name": "Egerton University",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 7,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "LUM",
+    "name": "Lumumba FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 8,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KAP",
+    "name": "Kapenguria Heroes",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 9,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "SIG",
+    "name": "Sigalagala FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 10,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MIG",
+    "name": "Migori Youth",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 11,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MUL",
+    "name": "Mulot FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 12,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "HOM",
+    "name": "Homabay Stars",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 13,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "GAT",
+    "name": "Gatanga FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 14,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MBO",
+    "name": "Mbotela Kamaliza",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 15,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "BUR",
+    "name": "Buru Buru United",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 16,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KIS2",
+    "name": "Kisii United",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 17,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KIT",
+    "name": "Kitale FC",
+    "divisionId": "KEN2",
+    "countryId": "KEN",
+    "rank": 18,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "VIL",
+    "name": "Vipers SC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 1,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "KCP",
+    "name": "KCCA FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 2,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "EXP",
+    "name": "Express FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 3,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "SCU",
+    "name": "SC Villa",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 4,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "KIT",
+    "name": "Kitara FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 5,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "URA",
+    "name": "URA FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 6,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "BUL",
+    "name": "BUL FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 7,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NEC",
+    "name": "NEC FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 8,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "UPDF",
+    "name": "UPDF FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 9,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MBC",
+    "name": "Mbarara City FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 10,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "WFC",
+    "name": "Wakiso Giants FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 11,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "BRI",
+    "name": "Bright Stars FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 12,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "POL",
+    "name": "Police FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 13,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "SAN",
+    "name": "Soltilo Bright Stars",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 14,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "GAD",
+    "name": "Gaddafi FC",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 15,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "BUS",
+    "name": "Busoga United",
+    "divisionId": "UGA1",
+    "countryId": "UGA",
+    "rank": 16,
+    "status": "pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "TON",
+    "name": "Tooro United",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 1,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KYE",
+    "name": "Kyetume FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 2,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "WAT",
+    "name": "Water FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 3,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KYA",
+    "name": "Kyambogo United",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 4,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NEY",
+    "name": "Nebbi Central FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 5,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KAT",
+    "name": "Kataka FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 6,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "DYN",
+    "name": "Doves All Stars FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 7,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MUN",
+    "name": "Mbale Heroes FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 8,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "LIG",
+    "name": "Light SS FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 9,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "PAD",
+    "name": "Paidha Black Angels",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 10,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KAM",
+    "name": "Kampala Junior Team",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 11,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "BOO",
+    "name": "Booma FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 12,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "LAN",
+    "name": "Lango FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 13,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "GOM",
+    "name": "Gomba FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 14,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MUB",
+    "name": "Mubende Bufalo FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 15,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "CAL",
+    "name": "Calvary FC",
+    "divisionId": "UGA2",
+    "countryId": "UGA",
+    "rank": 16,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+
+  
+  {
+    "id": "YAN",
+    "name": "Young Africans",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 1,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "SIM",
+    "name": "Simba SC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 2,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "AZA",
+    "name": "Azam FC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 3,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "KIN",
+    "name": "Kinondoni MC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 4,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "CAG",
+    "name": "Coastal Union",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 5,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "KAG",
+    "name": "Kagera Sugar",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 6,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "MBE",
+    "name": "Mbeya City",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 7,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "IRG",
+    "name": "Ihefu FC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 8,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "DOD",
+    "name": "Dodoma Jiji",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 9,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "TAN",
+    "name": "Tanzania Prisons",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 10,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "NMW",
+    "name": "Namungo FC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 11,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "RUV",
+    "name": "Ruvu Shooting",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 12,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MAS",
+    "name": "Mwadui FC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 13,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KEN",
+    "name": "KenGold FC",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 14,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "PAM",
+    "name": "Pamba Jiji",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 15,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "POL2",
+    "name": "Polisi Tanzania",
+    "divisionId": "TAN1",
+    "countryId": "TAN",
+    "rank": 16,
+    "status": "pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "GEI",
+    "name": "Geita Gold FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 1,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MTI",
+    "name": "Mtibwa Sugar",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 2,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "STA",
+    "name": "Stand United FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 3,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "AFR",
+    "name": "African Lyon",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 4,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "PRI",
+    "name": "Prisons FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 5,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MWZ",
+    "name": "Mwanza FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 6,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "JKT",
+    "name": "JKT Ruvu",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 7,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "TAB",
+    "name": "Tabora United",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 8,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "SIN",
+    "name": "Singida United",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 9,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "LIP",
+    "name": "Lipuli FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 10,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MOR",
+    "name": "Morogoro United",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 11,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KIL",
+    "name": "Kilifi FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 12,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "DAR",
+    "name": "Dar Young Africans",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 13,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MBE2",
+    "name": "Mbeya Kwanza FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 14,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "CHM",
+    "name": "Chamazi FC",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 15,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "IRN",
+    "name": "Iringa United",
+    "divisionId": "TAN2",
+    "countryId": "TAN",
+    "rank": 16,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "SUN",
+    "name": "Mamelodi Sundowns",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 1,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "KAI",
+    "name": "Kaizer Chiefs",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 2,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "ORL",
+    "name": "Orlando Pirates",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 3,
+    "status": "pro",
+    "balance": "rich"
+  },
+  {
+    "id": "SUP",
+    "name": "SuperSport United",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 4,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "CAP",
+    "name": "Cape Town City",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 5,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "STE",
+    "name": "Stellenbosch FC",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 6,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "AMA",
+    "name": "AmaZulu FC",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 7,
+    "status": "pro",
+    "balance": "average"
+  },
+  {
+    "id": "SEC",
+    "name": "Sekhukhune United",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 8,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MAR",
+    "name": "Maritzburg United",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 9,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "GOL",
+    "name": "Golden Arrows",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 10,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "CHI",
+    "name": "Chippa United",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 11,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "ROY",
+    "name": "Royal AM",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 12,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "RIC",
+    "name": "Richards Bay FC",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 13,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "POL3",
+    "name": "Polokwane City",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 14,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MOR2",
+    "name": "Moroka Swallows",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 15,
+    "status": "pro",
+    "balance": "poor"
+  },
+  {
+    "id": "TSG",
+    "name": "TS Galaxy",
+    "divisionId": "RSA1",
+    "countryId": "RSA",
+    "rank": 16,
+    "status": "pro",
+    "balance": "poor"
+  },
+
+
+  {
+    "id": "CAP2",
+    "name": "Cape Town Spurs",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 1,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MAG",
+    "name": "Magesi FC",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 2,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "UNI",
+    "name": "University of Pretoria",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 3,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "PLA",
+    "name": "Platinum Stars",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 4,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "HUN",
+    "name": "Hungry Lions",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 5,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "JDR",
+    "name": "JDR Stars",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 6,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "MIL",
+    "name": "Milano United",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 7,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "CAS",
+    "name": "Casric Stars",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 8,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "PRE",
+    "name": "Pretoria Callies",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 9,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "UPL",
+    "name": "Upington City",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 10,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "ARC",
+    "name": "Arcadia Shepherds",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 11,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "TUT",
+    "name": "Tshwane University of Technology",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 12,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "BAR",
+    "name": "Baroka FC",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 13,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "KRU",
+    "name": "Kruger United",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 14,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "AMB",
+    "name": "AmaTuks",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 15,
+    "status": "semi-pro",
+    "balance": "poor"
+  },
+  {
+    "id": "OSO",
+    "name": "Osoka Stars",
+    "divisionId": "RSA2",
+    "countryId": "RSA",
+    "rank": 16,
+    "status": "semi-pro",
+    "balance": "poor"
+  }
+]

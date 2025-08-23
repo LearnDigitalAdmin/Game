@@ -1,0 +1,8 @@
+{
+  "KEN": { "firstNames": ["Brian","Samuel","Michael","John","David","Victor","Collins","Kevin","Francis","George"], "lastNames": ["Ochieng","Mwangi","Odhiambo","Mutua","Omolo","Njoroge","Obiero","Were","Ouma","Kiptoo","Barasa","Munyiri","Nyaga","Oduor","Wanjiku","Atieno","Otieno"] },
+  "UGA": { "firstNames": ["Joseph","Emmanuel","Paul","Isaac","Denis","Robert","Allan","Steven","Ronald","Patrick"], "lastNames": ["Okello","Mugerwa","Kasule","Ssebunya","Mukasa","Kigozi","Kavuma","Nsubuga","Wasswa","Lukwago","Mutebi","Nsimbe","Lubega","Muwonge","Ssenyonga","Baluku","Mawanda"] },
+  "TZA": { "firstNames": ["Juma","Said","Abdul","Hassan","Ramadhani","Ali","Adam","Hamisi","Mussa","Yahya"], "lastNames": ["Msuva","Moses","Selemani","Mnyika","Mgaya","Mkude","Nassor","Kassim","Mwaikenda","Mmbaga","Hussein","Manula","Chirwa","Khamis","Bakari","Omary","Nyoni"] },
+  "RSA": { "firstNames": ["Sipho","Thabo","Themba","Sibusiso","Kagiso","Lebo","Mandla","Andile","Lucky","Teboho"], "lastNames": ["Mkhize","Dlamini","Nkosi","Khumalo","Zulu","Ngcobo","Ndlovu","Buthelezi","Radebe","Mthembu","Cele","Phiri","Mabena","Shabalala","Majola","Mokoena","Mnguni"] },
+  "NGA": { "firstNames": ["Chinedu","Ifeanyi","Emeka","Sunday","Peter","Daniel","Obinna","Ikechukwu","Collins","Samuel"], "lastNames": ["Okafor","Eze","Nwankwo","Onyeka","Iheanacho","Chukwu","Ojo","Adeyemi","Balogun","Afolabi","Uche","Ajayi","Lawal","Olatunji","Oduwole","Ogunleye","Akinwale"] },
+  "CIV": { "firstNames": ["Serge","Jean","Didier","Yaya","Gervais","Max","Wilfried","Eric","Salomon","Franck"], "lastNames": ["Kouassi","Traore","Kone","Diabate","Yao","Doumbia","Toure","Diallo","Zoumana","Gnabry","Boly","Nguessan","Zokora","Kouame","Gbane","Sangare","Akpa"] }
+}

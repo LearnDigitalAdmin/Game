@@ -1,0 +1,10 @@
+[
+  {
+    "id": "CAF",
+    "name": "Confederation of African Football",
+    "region": "Africa",
+    "founded": 1957,
+    "hq": "Cairo, Egypt",
+    "tournaments": ["CAFCL", "CAFCC"]
+  }
+]

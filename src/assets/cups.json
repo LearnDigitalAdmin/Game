@@ -1,0 +1,42 @@
+[
+  {
+    "id": "FKFCUP",
+    "name": "FKF Cup",
+    "countryId": "KEN",
+    "rules": {
+      "qualification": "All professional clubs",
+      "cafccQualify": 1,
+      "suspensions": { "yellowCardAccumulation": 2, "redCard": 1 }
+    }
+  },
+  {
+    "id": "UGCUP",
+    "name": "Uganda Cup",
+    "countryId": "UGA",
+    "rules": {
+      "qualification": "All professional clubs",
+      "cafccQualify": 1,
+      "suspensions": { "yellowCardAccumulation": 2, "redCard": 1 }
+    }
+  },
+  {
+    "id": "TZACUP",
+    "name": "Azam Sports Federation Cup",
+    "countryId": "TZA",
+    "rules": {
+      "qualification": "All professional clubs",
+      "cafccQualify": 1,
+      "suspensions": { "yellowCardAccumulation": 2, "redCard": 1 }
+    }
+  },
+  {
+    "id": "RSACUP",
+    "name": "Nedbank Cup",
+    "countryId": "RSA",
+    "rules": {
+      "qualification": "All professional clubs",
+      "cafccQualify": 1,
+      "suspensions": { "yellowCardAccumulation": 2, "redCard": 1 }
+    }
+  }
+]

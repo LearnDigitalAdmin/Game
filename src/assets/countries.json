@@ -1,0 +1,6 @@
+[
+  { "id": "KEN", "name": "Kenya", "federationId": "FKF", "continentFedId": "CAF", "rank": 104 },
+  { "id": "UGA", "name": "Uganda", "federationId": "FUFA", "continentFedId": "CAF", "rank": 92 },
+  { "id": "TZA", "name": "Tanzania", "federationId": "TFF", "continentFedId": "CAF", "rank": 119 },
+  { "id": "RSA", "name": "South Africa", "federationId": "SAFA", "continentFedId": "CAF", "rank": 62 }
+]

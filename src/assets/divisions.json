@@ -1,0 +1,146 @@
+[
+  {
+    "id": "KEN1",
+    "name": "FKF Premier League",
+    "countryId": "KEN",
+    "tier": 1,
+    "clubs": 18,
+    "rules": {
+      "promotion": 0,
+      "relegation": 2,
+      "cafclQualify": 1,
+      "cafccQualify": 1,
+      "transferWindows": [
+        { "start": "07-01", "end": "09-15" },
+        { "start": "01-01", "end": "01-31" }
+      ],
+      "suspensions": {
+        "yellowCardAccumulation": 5,
+        "redCard": 1
+      }
+    }
+  },
+  {
+    "id": "KEN2",
+    "name": "National Super League",
+    "countryId": "KEN",
+    "tier": 2,
+    "clubs": 18,
+    "rules": {
+      "promotion": 2,
+      "relegation": 2,
+      "cafclQualify": null,
+      "cafccQualify": null,
+      "transferWindows": null,
+      "suspensions": null
+    }
+  },
+  {
+    "id": "UGA1",
+    "name": "Uganda Premier League",
+    "countryId": "UGA",
+    "tier": 1,
+    "clubs": 18,
+    "rules": {
+      "promotion": 0,
+      "relegation": 3,
+      "cafclQualify": 1,
+      "cafccQualify": 1,
+      "transferWindows": [
+        { "start": "08-01", "end": "09-30" },
+        { "start": "01-01", "end": "01-31" }
+      ],
+      "suspensions": {
+        "yellowCardAccumulation": 5,
+        "redCard": 1
+      }
+    }
+  },
+  {
+    "id": "UGA2",
+    "name": "FUFA Big League",
+    "countryId": "UGA",
+    "tier": 2,
+    "clubs": 18,
+    "rules": {
+      "promotion": 3,
+      "relegation": 3,
+      "cafclQualify": null,
+      "cafccQualify": null,
+      "transferWindows": null,
+      "suspensions": null
+    }
+  },
+  {
+    "id": "TZA1",
+    "name": "NBC Premier League",
+    "countryId": "TZA",
+    "tier": 1,
+    "clubs": 18,
+    "rules": {
+      "promotion": 0,
+      "relegation": 3,
+      "cafclQualify": 1,
+      "cafccQualify": 1,
+      "transferWindows": [
+        { "start": "07-15", "end": "09-15" },
+        { "start": "01-01", "end": "01-31" }
+      ],
+      "suspensions": {
+        "yellowCardAccumulation": 5,
+        "redCard": 1
+      }
+    }
+  },
+  {
+    "id": "TZA2",
+    "name": "Championship League",
+    "countryId": "TZA",
+    "tier": 2,
+    "clubs": 18,
+    "rules": {
+      "promotion": 3,
+      "relegation": 3,
+      "cafclQualify": null,
+      "cafccQualify": null,
+      "transferWindows": null,
+      "suspensions": null
+    }
+  },
+  {
+    "id": "RSA1",
+    "name": "DSTV Premiership",
+    "countryId": "RSA",
+    "tier": 1,
+    "clubs": 16,
+    "rules": {
+      "promotion": 0,
+      "relegation": 2,
+      "cafclQualify": 1,
+      "cafccQualify": 1,
+      "transferWindows": [
+        { "start": "07-01", "end": "08-31" },
+        { "start": "01-01", "end": "01-31" }
+      ],
+      "suspensions": {
+        "yellowCardAccumulation": 4,
+        "redCard": 1
+      }
+    }
+  },
+  {
+    "id": "RSA2",
+    "name": "National First Division",
+    "countryId": "RSA",
+    "tier": 2,
+    "clubs": 16,
+    "rules": {
+      "promotion": 2,
+      "relegation": 2,
+      "cafclQualify": null,
+      "cafccQualify": null,
+      "transferWindows": null,
+      "suspensions": null
+    }
+  }
+]

@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Force landscape orientation */
+html {
+  /* Lock screen orientation to landscape */
+  -webkit-transform-origin: left top;
+  -moz-transform-origin: left top;
+  -o-transform-origin: left top;
+  transform-origin: left top;
+  
+  /* Enable hardware acceleration */
+  -webkit-transform: translate3d(0,0,0);
+  transform: translate3d(0,0,0);
+}
+
+/* Portrait orientation detection and forced rotation */
+@media screen and (orientation: portrait) {
+  html {
+    -webkit-transform: rotate(-90deg);
+    -moz-transform: rotate(-90deg);
+    -o-transform: rotate(-90deg);
+    transform: rotate(-90deg);
+    
+    width: 100vh;
+    height: 100vw;
+    overflow-x: hidden;
+    position: absolute;
+    top: 100%;
+    left: 0;
+  }
+  
+  body {
+    width: 100vh;
+    height: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+/* Ensure proper dimensions in landscape */
+@media screen and (orientation: landscape) {
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow-x: auto;
+  }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
