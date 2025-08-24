@@ -1,3 +1,4 @@
+// src/App.tsx - Complete Integration with Calendar System
 import { useState, useEffect } from "react";
 import { LandingScreen } from "./global/screens/LandingScreen";
 import { ModeSelection } from "./global/screens/ModeSelection";
@@ -7,6 +8,8 @@ import { ManagerClubSelection } from "./manager/setup/ManagerClubSelection";
 import { gameDB } from "./global/database/Save";
 import { MODES, type GameState, type Mode } from "./global/types/GameTypes";
 import { ModeHome } from "./global/layout/ModeHome";
+import { CalendarProvider } from "./global/calendar/Calendar";
+import IntegratedCalendarView from "./global/calendar/CalendarView";
 
 // Updated manager data interface to match the new setup flow
 interface ManagerData {
@@ -44,6 +47,7 @@ export default function App() {
   const [dbError, setDbError] = useState<string | null>(null);
   const [currentSaveId, setCurrentSaveId] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState("Initializing...");
+  const [calendarInitialized, setCalendarInitialized] = useState(false);
   const [managerData, setManagerData] = useState<ManagerData>({
     name: "",
     age: 35,
@@ -190,18 +194,35 @@ export default function App() {
       // Load the save
       await gameDB.loadSave(saveId);
       
+      setLoadingMessage("Initializing calendar system...");
+      
+      // Mark calendar as ready to initialize
+      setCalendarInitialized(true);
+      
       setLoadingMessage("Starting game...");
       
       // Short delay for UX
       setTimeout(() => {
         setGameState("manager");
-      }, 1000);
+      }, 1500);
       
     } catch (error) {
       console.error('Error creating save:', error);
       setDbError('Failed to create save file. Please try again.');
       setGameState("managerClubSelect");
     }
+  };
+
+  // Helper function to get user club ID
+  const getUserClubId = (): string | undefined => {
+    return managerData.selectedClub?.id;
+  };
+
+  // Helper function to get season start date
+  const getSeasonStartDate = (): Date => {
+    // Default to August 1st of current year
+    const now = new Date();
+    return new Date(now.getFullYear(), 7, 1, 8, 0, 0); // August 1st, 8:00 AM
   };
 
   console.log('Current gameState:', gameState); // DEBUG LOG
@@ -289,7 +310,8 @@ export default function App() {
                 <li>• Player database ({loadingMessage.includes('Creating') ? 'In progress...' : 'Complete'})</li>
                 <li>• League tables ({loadingMessage.includes('Loading') ? 'In progress...' : 'Complete'})</li>
                 <li>• Club finances ({loadingMessage.includes('Loading') ? 'In progress...' : 'Complete'})</li>
-                <li>• Match fixtures ({loadingMessage.includes('Starting') ? 'In progress...' : 'Complete'})</li>
+                <li>• Match fixtures ({loadingMessage.includes('Initializing') ? 'In progress...' : 'Complete'})</li>
+                <li>• Calendar system ({loadingMessage.includes('Starting') ? 'In progress...' : 'Complete'})</li>
               </ul>
             </div>
           </div>
@@ -298,8 +320,41 @@ export default function App() {
     );
   }
   
+  // Special calendar view mode (accessible from manager mode)
+  if (gameState === "calendar") {
+    console.log('Rendering Calendar View'); // DEBUG LOG
+    return (
+      <CalendarProvider
+        startFrom={getSeasonStartDate()}
+        userClubId={getUserClubId()}
+      >
+        <IntegratedCalendarView />
+      </CalendarProvider>
+    );
+  }
+  
   if (MODES.includes(gameState)) {
     console.log('Rendering ModeHome with manager data and database:', managerData); // DEBUG LOG
+    
+    // Wrap ModeHome with CalendarProvider if calendar should be initialized
+    if (calendarInitialized && managerData.selectedClub) {
+      return (
+        <CalendarProvider
+          startFrom={getSeasonStartDate()}
+          userClubId={getUserClubId()}
+        >
+          <ModeHome 
+            mode={gameState as Mode} 
+            setGameState={setGameState} 
+            managerData={managerData}
+            database={gameDB}
+            saveId={currentSaveId}
+          />
+        </CalendarProvider>
+      );
+    }
+    
+    // Fallback without calendar if not ready
     return (
       <ModeHome 
         mode={gameState as Mode} 

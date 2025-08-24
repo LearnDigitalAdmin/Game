@@ -187,19 +187,36 @@ class IntegratedCalendarEngine {
   }
 
   private async initCalendarDB(): Promise<void> {
-    if (this.db) return;
+    // if (this.db) return;
 
     try {
       // Use separate calendar database or shared database
-      const connectionExists = await this.sqlite.isConnection("calendar", false);
+    //   const connectionExists = await this.sqlite.isConnection("calendar", false);
       
-      if (connectionExists.result) {
-        this.db = await this.sqlite.retrieveConnection("calendar", false);
-      } else {
-        this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
-      }
+    //   if (connectionExists.result) {
+    //     this.db = await this.sqlite.retrieveConnection("calendar", false);
+    //   } else {
+    //     this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
+    //   }
       
-      await this.db.open();
+    //   await this.db.open();
+
+
+
+      const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
+    
+    // Check if connection exists (requires database name and readonly boolean)
+    const connectionExists = await this.sqlite.isConnection("calendar", false);
+    
+    if (checkConnectionsConsistency.result && connectionExists.result) {
+      // Connection exists and is consistent, retrieve it
+      this.db = await this.sqlite.retrieveConnection("calendar", false);
+    } else {
+      // No connection exists or inconsistent, create new one
+      this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
+    }
+    
+    await this.db.open();
       
       // Create calendar-specific tables
       await this.createCalendarTables();

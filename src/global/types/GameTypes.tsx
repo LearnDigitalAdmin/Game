@@ -1,7 +1,7 @@
 export const MODES = ["player", "manager", "owner"] as const;
 export type Mode = (typeof MODES)[number];
 export type NavItem = { key: string; label: string; icon: React.ReactNode };
-export type GameState = "landing" | "modeSelect" | Mode | "managerSetup" | "managerLeagueSelect" | "managerClubSelect" | "loading";
+export type GameState = "landing" | "modeSelect" | Mode | "managerSetup" | "calendar" | "managerLeagueSelect" | "managerClubSelect" | "loading";
 
 //module - global/utils/geminiApi.tsx
 export const callGeminiApi = async (prompt: string): Promise<string> => {
