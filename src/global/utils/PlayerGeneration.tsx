@@ -1,5 +1,6 @@
 // PlayerGenerator.tsx - Football Management Game Player Generation Module
 import { v4 as uuidv4 } from 'uuid';
+import playersData from "../../assets/players.json";
 
 // ===== INTERFACES =====
 
@@ -23,6 +24,10 @@ export interface Player {
   form: number; // 0-100
   injuries: Injury[];
   history: PlayerHistory[];
+  // Add the missing properties
+  morale?: number;
+  fitness?: number;
+  matchSharpness?: number;
 }
 
 export interface Injury {
@@ -100,6 +105,26 @@ const INJURY_TYPES: InjuryType[] = [
   'Ankle Sprain', 'Knee Injury', 'Hamstring', 'Groin Strain'
 ];
 
+// Fallback names for countries not in JSON or as backup
+const FALLBACK_NAMES = {
+  firstNames: [
+    // International/Common names
+    'Alex', 'David', 'Michael', 'John', 'James', 'Daniel', 'Robert', 'Paul', 'Mark', 'Andrew',
+    'Chris', 'Matt', 'Tom', 'Ben', 'Sam', 'Luke', 'Adam', 'Ryan', 'Kevin', 'Jason',
+    // African names (common across regions)
+    'Emmanuel', 'Joseph', 'Francis', 'Peter', 'Samuel', 'Stephen', 'Moses', 'Isaac', 'Abraham', 'Benjamin',
+    'Collins', 'Dennis', 'George', 'Henry', 'Victor', 'Vincent', 'Patrick', 'Martin', 'Kenneth', 'Anthony'
+  ],
+  lastNames: [
+    // International surnames
+    'Johnson', 'Smith', 'Brown', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas',
+    'Jackson', 'White', 'Harris', 'Martin', 'Thompson', 'Garcia', 'Martinez', 'Robinson', 'Clark', 'Rodriguez',
+    // African surnames (common patterns)
+    'Mwangi', 'Kiprotich', 'Ochieng', 'Wanjiku', 'Kamau', 'Mutua', 'Omondi', 'Kiplagat', 'Njoroge', 'Wanjala',
+    'Otieno', 'Karanja', 'Macharia', 'Kiptoo', 'Cheruiyot', 'Rotich', 'Bett', 'Too', 'Koech', 'Langat'
+  ]
+};
+
 // Position distribution per squad (percentages)
 const POSITION_DISTRIBUTION = {
   GK: 0.12,   // ~3 players
@@ -130,16 +155,16 @@ const SECONDARY_POSITIONS: { [key in Position]: Position[] } = {
 
 // Physical attributes by position
 const POSITION_PHYSICAL = {
-  GK: { height: [180, 200], weight: [75, 95] },
-  CB: { height: [180, 200], weight: [75, 90] },
-  LB: { height: [170, 185], weight: [65, 80] },
-  RB: { height: [170, 185], weight: [65, 80] },
-  CDM: { height: [175, 190], weight: [70, 85] },
-  CM: { height: [170, 185], weight: [65, 80] },
-  CAM: { height: [165, 180], weight: [60, 75] },
-  LW: { height: [165, 180], weight: [60, 75] },
-  RW: { height: [165, 180], weight: [60, 75] },
-  ST: { height: [170, 190], weight: [65, 85] }
+  GK: { height: [180, 200], weight: [55, 95] },
+  CB: { height: [180, 200], weight: [55, 90] },
+  LB: { height: [170, 185], weight: [55, 80] },
+  RB: { height: [170, 185], weight: [55, 80] },
+  CDM: { height: [175, 190], weight: [50, 85] },
+  CM: { height: [170, 185], weight: [55, 80] },
+  CAM: { height: [165, 180], weight: [55, 75] },
+  LW: { height: [165, 180], weight: [55, 75] },
+  RW: { height: [165, 180], weight: [47, 75] },
+  ST: { height: [170, 190], weight: [44, 85] }
 };
 
 // ===== UTILITY FUNCTIONS =====
@@ -152,13 +177,6 @@ function randomBetween(min: number, max: number): number {
 }
 
 /**
- * Generate random float between min and max
- */
-function randomFloat(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}
-
-/**
  * Select random item from array
  */
 function randomFromArray<T>(array: T[]): T {
@@ -166,17 +184,22 @@ function randomFromArray<T>(array: T[]): T {
 }
 
 /**
- * Generate weighted random number with normal distribution
+ * Safely get player names data with proper error handling and validation
  */
-function normalRandom(mean: number, stdDev: number, min: number = 0, max: number = 100): number {
-  let u = 0, v = 0;
-  while(u === 0) u = Math.random(); // Converting [0,1) to (0,1)
-  while(v === 0) v = Math.random();
-  
-  const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-  const value = mean + z * stdDev;
-  
-  return Math.max(min, Math.min(max, Math.round(value)));
+function getPlayerNamesData(): PlayerNames {
+  try {
+    // Check if playersData is properly imported and has expected structure
+    if (playersData && typeof playersData === 'object') {
+      console.log('Players data loaded successfully:', Object.keys(playersData));
+      return playersData as PlayerNames;
+    } else {
+      console.warn('Players data not found or invalid structure, using fallback names');
+      return {};
+    }
+  } catch (error) {
+    console.error('Error loading players data:', error);
+    return {};
+  }
 }
 
 /**
@@ -184,8 +207,8 @@ function normalRandom(mean: number, stdDev: number, min: number = 0, max: number
  */
 function getClubQualityModifier(club: Club): number {
   const rankModifier = Math.max(0.3, 1 - (club.rank - 1) / 20); // Top clubs get higher modifier
-  const statusModifier = club.status === 'pro' ? 1.0 : 0.85;
-  const balanceModifier = club.balance === 'rich' ? 1.1 : club.balance === 'average' ? 1.0 : 0.9;
+  const statusModifier = club.status === 'pro' ? 1.0 : 0.75;
+  const balanceModifier = club.balance === 'rich' ? 1.1 : club.balance === 'average' ? 1.0 : 0.7;
   
   return rankModifier * statusModifier * balanceModifier;
 }
@@ -196,11 +219,11 @@ function getClubQualityModifier(club: Club): number {
 function generateAge(position: Position, clubQuality: number): number {
   // Different age profiles by position
   const ageRanges = {
-    GK: [22, 38],    // Goalkeepers have longer careers
-    CB: [20, 36],    // Center backs peak later
+    GK: [16, 38],    // Goalkeepers have longer careers
+    CB: [16, 36],    // Center backs peak later
     LB: [18, 34],    // Fullbacks need pace
     RB: [18, 34],
-    CDM: [20, 35],   // Defensive midfielders last longer
+    CDM: [16, 35],   // Defensive midfielders last longer
     CM: [18, 34],
     CAM: [18, 32],   // Attacking midfielders peak earlier
     LW: [17, 32],    // Wingers need pace
@@ -211,7 +234,7 @@ function generateAge(position: Position, clubQuality: number): number {
   const [minAge, maxAge] = ageRanges[position];
   
   // Higher quality clubs tend to have more experienced players
-  const experienceBias = clubQuality > 0.8 ? 2 : clubQuality > 0.6 ? 1 : 0;
+  const experienceBias = clubQuality > 0.7 ? 2 : clubQuality > 0.5 ? 1 : 0;
   
   return randomBetween(minAge + experienceBias, maxAge);
 }
@@ -228,17 +251,17 @@ function calculateBaseRating(age: number, position: Position, clubQuality: numbe
   
   if (position === 'GK') {
     // Goalkeepers peak later (28-35)
-    if (age < 25) ageModifier = 0.8 + (age - 16) * 0.02;
+    if (age < 25) ageModifier = 0.7 + (age - 16) * 0.02;
     else if (age <= 35) ageModifier = 1.0;
     else ageModifier = 1.0 - (age - 35) * 0.05;
   } else if (position === 'CB' || position === 'CDM') {
     // Defenders peak 26-32
-    if (age < 23) ageModifier = 0.75 + (age - 16) * 0.035;
+    if (age < 23) ageModifier = 0.65 + (age - 16) * 0.035;
     else if (age <= 32) ageModifier = 1.0;
     else ageModifier = 1.0 - (age - 32) * 0.04;
   } else {
     // Attackers and wingers peak 22-30
-    if (age < 20) ageModifier = 0.7 + (age - 16) * 0.05;
+    if (age < 20) ageModifier = 0.6 + (age - 16) * 0.05;
     else if (age <= 30) ageModifier = 1.0;
     else ageModifier = 1.0 - (age - 30) * 0.06;
   }
@@ -246,16 +269,16 @@ function calculateBaseRating(age: number, position: Position, clubQuality: numbe
   const baseRating = Math.round(clubBase * ageModifier);
   
   // Add some randomness (-5 to +5)
-  return Math.max(30, Math.min(95, baseRating + randomBetween(-5, 5)));
+  return Math.max(30, Math.min(81, baseRating + randomBetween(-5, 5)));
 }
 
 /**
  * Calculate potential based on current rating and age
  */
 function calculatePotential(currentRating: number, age: number): number {
-  if (age >= 28) {
+  if (age >= 27) {
     // Older players rarely improve significantly
-    return Math.min(100, currentRating + randomBetween(-2, 3));
+    return Math.min(97, currentRating + randomBetween(-2, 3));
   }
   
   // Younger players have higher potential upside
@@ -295,13 +318,12 @@ function calculateWage(rating: number, club: Club): number {
   // Base wage calculation
   const baseWage = Math.pow(rating / 25, 2.2) * 1000;
   
-  // Club balance modifier
+  // Club balance modifier with proper fallback
   const balanceModifier = {
   rich: 1.4,
   average: 1.0,
-  poor: 0.7,
-  default: 1.0 // add a default value
-}[club.balance] || 1.0; // use the default value if club.balance is not found
+  poor: 0.7
+}[(club.balance as 'rich' | 'average' | 'poor')] || 0.8;// fallback for unknown balance types
   
   // Professional vs semi-professional
   const statusModifier = club.status === 'pro' ? 1.0 : 0.6;
@@ -346,12 +368,7 @@ function generateInjury(): Injury | null {
     Minor: [3, 14],
     Moderate: [14, 45],
     Major: [45, 180]
-};
-//   const durationRanges = {
-//     Minor: [3, 14],
-//     Moderate: [14, 45],
-//     Major: [45, 180]
-//   };
+  };
   
   const duration = randomBetween(...durationRanges[severity]);
   const recurring = Math.random() < 0.15; 
@@ -360,22 +377,32 @@ function generateInjury(): Injury | null {
 }
 
 /**
- * Generate player name from country pool
+ * Generate player name from country pool with improved fallback handling
  */
 function generatePlayerName(countryId: string, playerNames: PlayerNames): { firstName: string; lastName: string } {
-  const names = playerNames[countryId];
+  // First try to get names from the provided country data
+  const countryNames = playerNames[countryId];
   
-  if (!names || names.firstNames.length === 0 || names.lastNames.length === 0) {
-    // Fallback to generic names if country not found
+  if (countryNames && 
+      countryNames.firstNames && 
+      countryNames.lastNames && 
+      countryNames.firstNames.length > 0 && 
+      countryNames.lastNames.length > 0) {
+    
+    console.log(`Using names for country: ${countryId}`);
     return {
-      firstName: randomFromArray(['John', 'Michael', 'David', 'James', 'Robert']),
-      lastName: randomFromArray(['Smith', 'Johnson', 'Williams', 'Brown', 'Jones'])
+      firstName: randomFromArray(countryNames.firstNames),
+      lastName: randomFromArray(countryNames.lastNames)
     };
   }
   
+  // Log missing country data for debugging
+  console.warn(`No name data found for country: ${countryId}, using fallback names`);
+  
+  // Use fallback names
   return {
-    firstName: randomFromArray(names.firstNames),
-    lastName: randomFromArray(names.lastNames)
+    firstName: randomFromArray(FALLBACK_NAMES.firstNames),
+    lastName: randomFromArray(FALLBACK_NAMES.lastNames)
   };
 }
 
@@ -484,7 +511,7 @@ function generateClubPlayers(
  */
 function generateFreeAgents(
   playerNames: PlayerNames,
-  countries: Country[],
+  _countries: Country[],
   config: GenerationConfig
 ): Player[] {
   const freeAgents: Player[] = [];
@@ -506,7 +533,7 @@ function generateFreeAgents(
 export function generateAllPlayers(
   clubs: Club[],
   countries: Country[],
-  playerNames: PlayerNames,
+  playerNamesParam?: PlayerNames,
   config: Partial<GenerationConfig> = {}
 ): Player[] {
   const finalConfig: GenerationConfig = {
@@ -517,9 +544,13 @@ export function generateAllPlayers(
     ...config
   };
   
-  console.log(`Starting player generation for ${clubs.length} clubs...`);
-  const startTime = Date.now();
+  // Use provided playerNames or load from JSON with fallback
+  const playerNames = playerNamesParam || getPlayerNamesData();
   
+  console.log(`Starting player generation for ${clubs.length} clubs...`);
+  console.log(`Available countries in name data: ${Object.keys(playerNames).join(', ')}`);
+  
+  const startTime = Date.now();
   const allPlayers: Player[] = [];
   
   // Generate club players
@@ -544,6 +575,13 @@ export function generateAllPlayers(
   console.log(`Club players: ${allPlayers.filter(p => p.clubId).length}`);
   console.log(`Free agents: ${allPlayers.filter(p => !p.clubId).length}`);
   console.log(`Average rating: ${Math.round(allPlayers.reduce((sum, p) => sum + p.rating, 0) / allPlayers.length)}`);
+  
+  // Log sample of generated names for verification
+  const samplePlayers = allPlayers.slice(0, 5);
+  console.log('Sample generated players:');
+  samplePlayers.forEach(p => {
+    console.log(`${p.firstName} ${p.lastName} (${p.countryId}) - ${p.position} - Rating: ${p.rating}`);
+  });
   
   return allPlayers;
 }
@@ -600,7 +638,15 @@ export function generatePlayerStatistics(players: Player[]): any {
     averageRating: Math.round(players.reduce((sum, p) => sum + p.rating, 0) / players.length),
     positionDistribution: {} as Record<Position, number>,
     countryDistribution: {} as Record<string, number>,
-    injuredPlayers: players.filter(p => p.injuries.length > 0).length
+    injuredPlayers: players.filter(p => p.injuries.length > 0).length,
+    nameDistribution: {
+      uniqueFirstNames: new Set(players.map(p => p.firstName)).size,
+      uniqueLastNames: new Set(players.map(p => p.lastName)).size,
+      fallbackUsage: players.filter(p => 
+        FALLBACK_NAMES.firstNames.includes(p.firstName) || 
+        FALLBACK_NAMES.lastNames.includes(p.lastName)
+      ).length
+    }
   };
   
   // Position distribution
@@ -615,4 +661,36 @@ export function generatePlayerStatistics(players: Player[]): any {
   });
   
   return stats;
+}
+
+/**
+ * Debug function to test name generation
+ */
+export function debugNameGeneration(countryId: string = 'NGA'): void {
+  const playerNames = getPlayerNamesData();
+  console.log('=== NAME GENERATION DEBUG ===');
+  console.log('Available countries:', Object.keys(playerNames));
+  console.log(`Testing country: ${countryId}`);
+  
+  if (playerNames[countryId]) {
+    console.log('First names:', playerNames[countryId].firstNames?.slice(0, 5));
+    console.log('Last names:', playerNames[countryId].lastNames?.slice(0, 5));
+    
+    // Generate 5 sample names
+    console.log('Sample generated names:');
+    for (let i = 0; i < 5; i++) {
+      const name = generatePlayerName(countryId, playerNames);
+      console.log(`${i + 1}. ${name.firstName} ${name.lastName}`);
+    }
+  } else {
+    console.log(`Country ${countryId} not found in data`);
+    console.log('Fallback names will be used');
+    
+    // Generate sample fallback names
+    console.log('Sample fallback names:');
+    for (let i = 0; i < 5; i++) {
+      const name = generatePlayerName(countryId, playerNames);
+      console.log(`${i + 1}. ${name.firstName} ${name.lastName}`);
+    }
+  }
 }

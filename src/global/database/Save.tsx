@@ -132,35 +132,11 @@ export interface GameState {
 export class FootballManagerDB {
   private sqlite: SQLiteConnection;
   private db: SQLiteDBConnection | null = null;
-  private dbName: string = '';
   private isReady: boolean = false;
 
   constructor() {
     this.sqlite = new SQLiteConnection(CapacitorSQLite);
   }
-
-  // ===== DATABASE INITIALIZATION =====
-
-  async initialize(): Promise<void> {
-  try {
-    // Simplified approach - just try to retrieve connection, create if it fails
-    try {
-      this.db = await this.sqlite.retrieveConnection("footballmanager", false);
-    } catch {
-      // Connection doesn't exist, create it
-      this.db = await this.sqlite.createConnection("footballmanager", false, "no-encryption", 1, false);
-    }
-    
-    await this.db.open();
-    await this.createTables();
-    this.isReady = true;
-    
-    console.log('Football Manager Database initialized successfully');
-  } catch (error) {
-    console.error('Error initializing database:', error);
-    throw error;
-  }
-}
 
   private async createTables(): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -392,7 +368,46 @@ export class FootballManagerDB {
 
   // ===== SAVE FILE MANAGEMENT =====
 
-  async createSave(saveData: {
+// ===== UPDATED DATABASE INITIALIZATION =====
+
+// ===== FIXED DATABASE INITIALIZATION =====
+
+async initialize(): Promise<void> {
+  try {
+    console.log('Initializing Football Manager Database...');
+    
+    // Check connections consistency
+    const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
+    
+    // Check if connection exists (requires database name and readonly boolean)
+    const connectionExists = await this.sqlite.isConnection("footballmanager", false);
+    
+    if (checkConnectionsConsistency.result && connectionExists.result) {
+      // Connection exists and is consistent, retrieve it
+      this.db = await this.sqlite.retrieveConnection("footballmanager", false);
+    } else {
+      // No connection exists or inconsistent, create new one
+      this.db = await this.sqlite.createConnection("footballmanager", false, "no-encryption", 1, false);
+    }
+    
+    await this.db.open();
+    
+    // Create tables without PRAGMA statements
+    await this.createTables();
+    this.isReady = true;
+    
+    console.log('Football Manager Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
+}
+
+// ===== SIMPLIFIED CREATE SAVE METHOD (NO TRANSACTIONS) =====
+
+// ===== HIGH-SPEED OPTIMIZED CREATE SAVE METHOD =====
+
+async createSave(saveData: {
   name: string;
   managerData: any;
   clubData: any;
@@ -404,8 +419,8 @@ export class FootballManagerDB {
   const currentDate = new Date().toISOString();
 
   try {
-    await this.db.execute('BEGIN TRANSACTION');
-
+    console.log('Creating save file record...');
+    
     // Create save file record
     await this.db.run(
       `INSERT INTO save_files (id, name, club_name, manager_name, season, game_date, last_played, created_at)
@@ -413,35 +428,289 @@ export class FootballManagerDB {
       [saveId, saveData.name, saveData.clubData.name, saveData.managerData.name, '2024-25', '2024-08-01', currentDate, currentDate]
     );
 
+    console.log('Initializing game state...');
+    
     // Initialize game state
     await this.db.run(
-      `INSERT INTO game_state (current_date, current_season, current_matchday, game_speed, auto_save, notifications)
+      `INSERT OR REPLACE INTO game_state (current_date, current_season, current_matchday, game_speed, auto_save, notifications)
        VALUES (?, ?, ?, ?, ?, ?)`,
       ['2024-08-01', '2024-25', 1, 'paused', 1, '[]']
     );
 
+    console.log('Creating manager record...');
+    
     // Create manager record
     await this.db.run(
-      `INSERT INTO managers (id, name, age, nationality, coaching_style, country_id, country_federation, country_rank, club_id)
+      `INSERT OR REPLACE INTO managers (id, name, age, nationality, coaching_style, country_id, country_federation, country_rank, club_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ['manager_1', saveData.managerData.name, saveData.managerData.age, saveData.managerData.nationality, 
        saveData.managerData.coachingStyle, saveData.managerData.countryId, saveData.managerData.countryFederation, 
        saveData.managerData.countryRank, saveData.clubData.id]
     );
 
-    // Load and insert all game data
-    await this.loadGameData(saveData.selectedCountries, saveData.clubData);
+    console.log('Loading game data at high speed...');
     
-
-    await this.db.execute('COMMIT');
-    console.log(`Save file created: ${saveId}`);
+    // Load game data using high-speed method
+    await this.loadGameDataFast(saveData.selectedCountries, saveData.clubData);
+    
+    console.log(`Save file created successfully: ${saveId}`);
     return saveId;
+    
   } catch (error) {
-    await this.db.execute('ROLLBACK');
     console.error('Error creating save:', error);
+    
+    // Try to clean up the save file if it was created
+    try {
+      await this.db.run('DELETE FROM save_files WHERE id = ?', [saveId]);
+      console.log('Cleaned up failed save file');
+    } catch (cleanupError) {
+      console.error('Failed to cleanup failed save:', cleanupError);
+    }
     throw error;
   }
 }
+
+// ===== HIGH-SPEED LOAD GAME DATA METHOD =====
+
+private async loadGameDataFast(selectedCountries: string[], _userClub: any): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  try {
+    console.log('Loading static data files...');
+    
+    // Load all static data in parallel
+    const [countriesData, divisionsData, clubsData, tablesData, playersData] = await Promise.all([
+      import('../../assets/countries.json'),
+      import('../../assets/divisions.json'),
+      import('../../assets/clubs.json'),
+      import('../../assets/tables.json'),
+      import('../../assets/players.json')
+    ]);
+
+    const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
+    const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
+    const clubs = clubsData.default.filter((c: any) => selectedCountries.includes(c.countryId));
+
+    console.log(`Processing ${divisions.length} divisions, ${clubs.length} clubs...`);
+
+    // === BULK INSERT DIVISIONS ===
+    console.log('Bulk inserting divisions...');
+    const divisionStatements = divisions.map(division => ({
+      statement: `INSERT OR REPLACE INTO divisions (id, name, country_id, tier, clubs, season, matchday, status)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      values: [division.id, division.name, division.countryId, division.tier, division.clubs, '2024-25', 1, 'active']
+    }));
+
+    if (divisionStatements.length > 0) {
+      await this.db.executeSet(divisionStatements);
+    }
+
+    // === BULK INSERT CLUBS ===
+    console.log('Bulk inserting clubs...');
+    const clubStatements = clubs.map(club => {
+      const transferBudget = club.balance === 'rich' ? 5000000 : club.balance === 'average' ? 2000000 : 500000;
+      const wageBudget = Math.round(transferBudget * 0.6);
+
+      return {
+        statement: `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
+                    reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
+                'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
+      };
+    });
+
+    if (clubStatements.length > 0) {
+      await this.db.executeSet(clubStatements);
+    }
+
+    // === BULK INSERT LEAGUE TABLES ===
+    console.log('Bulk inserting league tables...');
+    const tableStatements: any[] = [];
+    
+    for (const [divisionId, tableData] of Object.entries(tablesData.default)) {
+      if (divisions.find(d => d.id === divisionId)) {
+        const table = (tableData as any).table;
+        for (let index = 0; index < table.length; index++) {
+          const team = table[index];
+          tableStatements.push({
+            statement: `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
+                        goals_for, goals_against, goal_difference, points, form, position)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            values: [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
+                    team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
+          });
+        }
+      }
+    }
+
+    if (tableStatements.length > 0) {
+      await this.db.executeSet(tableStatements);
+    }
+
+    // === GENERATE AND BULK INSERT PLAYERS ===
+    console.log('Generating players...');
+    const players = generateAllPlayers(clubs, countries, playersData.default, {
+      playersPerClub: 25,
+      freeAgentCount: 100,
+      currentSeason: '2024-25',
+      injuryProbability: 0.15
+    });
+
+    console.log(`Generated ${players.length} players. Bulk inserting...`);
+
+    // Insert players in optimized batches
+    await this.bulkInsertPlayers(players);
+
+    console.log('All game data loaded at high speed!');
+    
+  } catch (error) {
+    console.error('Error loading game data:', error);
+    throw error;
+  }
+}
+
+// ===== OPTIMIZED BULK PLAYER INSERTION =====
+
+private async bulkInsertPlayers(players: Player[]): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const batchSize = 200; // Larger batches for speed
+  const totalBatches = Math.ceil(players.length / batchSize);
+
+  for (let i = 0; i < players.length; i += batchSize) {
+    const batch = players.slice(i, i + batchSize);
+    const batchNumber = Math.floor(i / batchSize) + 1;
+    
+    console.log(`Bulk inserting player batch ${batchNumber}/${totalBatches} (${batch.length} players)...`);
+
+    try {
+      // Prepare all player statements for this batch
+      const playerStatements = batch.map(player => ({
+        statement: `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
+                   rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
+                player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
+                player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
+                '2026-06-30', 75, 100, 70]
+      }));
+
+      // Bulk insert all players in this batch
+      await this.db.executeSet(playerStatements);
+
+      // Prepare all injury statements for this batch
+      const injuryStatements: any[] = [];
+      for (const player of batch) {
+        for (const injury of player.injuries) {
+          const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+          injuryStatements.push({
+            statement: `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            values: [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
+          });
+        }
+      }
+
+      // Bulk insert all injuries for this batch
+      if (injuryStatements.length > 0) {
+        await this.db.executeSet(injuryStatements);
+      }
+
+    } catch (error) {
+      console.error(`Error in bulk insert batch ${batchNumber}:`, error);
+      
+      // Fallback to individual inserts for this batch only
+      console.log(`Falling back to individual inserts for batch ${batchNumber}...`);
+      await this.insertPlayersIndividually(batch);
+    }
+  }
+}
+
+// ===== FALLBACK INDIVIDUAL INSERTION =====
+
+private async insertPlayersIndividually(players: Player[]): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  for (const player of players) {
+    try {
+      await this.db.run(
+        `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
+         rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
+         player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
+         player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
+         '2026-06-30', 75, 100, 70]
+      );
+
+      // Insert injuries individually
+      for (const injury of player.injuries) {
+        const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        await this.db.run(
+          `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
+        );
+      }
+    } catch (playerError) {
+      console.error(`Failed to insert player ${player.firstName} ${player.lastName}:`, playerError);
+      // Continue with next player
+    }
+  }
+}
+
+
+
+
+// Method for ultra-fast save creation (if you want to skip some data initially)
+async createSaveFast(saveData: {
+  name: string;
+  managerData: any;
+  clubData: any;
+  selectedCountries: string[];
+}): Promise<string> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const saveId = `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const currentDate = new Date().toISOString();
+
+  try {
+    console.log('Creating save with essential data only (fast mode)...');
+    
+    // Essential data only
+    await this.db.executeSet([
+      {
+        statement: `INSERT INTO save_files (id, name, club_name, manager_name, season, game_date, last_played, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [saveId, saveData.name, saveData.clubData.name, saveData.managerData.name, '2024-25', '2024-08-01', currentDate, currentDate]
+      },
+      {
+        statement: `INSERT OR REPLACE INTO game_state (current_date, current_season, current_matchday, game_speed, auto_save, notifications)
+                   VALUES (?, ?, ?, ?, ?, ?)`,
+        values: ['2024-08-01', '2024-25', 1, 'paused', 1, '[]']
+      },
+      {
+        statement: `INSERT OR REPLACE INTO managers (id, name, age, nationality, coaching_style, country_id, country_federation, country_rank, club_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: ['manager_1', saveData.managerData.name, saveData.managerData.age, saveData.managerData.nationality, 
+               saveData.managerData.coachingStyle, saveData.managerData.countryId, saveData.managerData.countryFederation, 
+               saveData.managerData.countryRank, saveData.clubData.id]
+      }
+    ]);
+
+    // Load game data in background (you could make this optional)
+    setTimeout(() => this.loadGameDataFast(saveData.selectedCountries, saveData.clubData), 100);
+    
+    console.log(`Fast save created: ${saveId}`);
+    return saveId;
+    
+  } catch (error) {
+    console.error('Error creating fast save:', error);
+    throw error;
+  }
+}
+
 
   async loadSave(saveId: string): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -471,96 +740,96 @@ export class FootballManagerDB {
 
   // ===== GAME DATA LOADING =====
 
-  private async loadGameData(selectedCountries: string[], userClub: any): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
+  // private async loadGameData(selectedCountries: string[], _userClub: any): Promise<void> {
+  //   if (!this.db) throw new Error('Database not initialized');
 
-    // Load countries data
-    const countriesData = await import('../../assets/countries.json');
-    const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
+  //   // Load countries data
+  //   const countriesData = await import('../../assets/countries.json');
+  //   const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
 
-    // Load divisions data
-    const divisionsData = await import('../../assets/divisions.json');
-    const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
+  //   // Load divisions data
+  //   const divisionsData = await import('../../assets/divisions.json');
+  //   const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
 
-    // Load clubs data
-    const clubsData = await import('../../assets/clubs.json');
-    const clubs = clubsData.default.filter((c: any) => selectedCountries.includes(c.countryId));
+  //   // Load clubs data
+  //   const clubsData = await import('../../assets/clubs.json');
+  //   const clubs = clubsData.default.filter((c: any) => selectedCountries.includes(c.countryId));
 
-    // Load tables data
-    const tablesData = await import('../../assets/tables.json');
+  //   // Load tables data
+  //   const tablesData = await import('../../assets/tables.json');
 
-    // Insert divisions
-    for (const division of divisions) {
-      await this.db.run(
-        `INSERT OR REPLACE INTO divisions (id, name, country_id, tier, clubs, season, matchday, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [division.id, division.name, division.countryId, division.tier, division.clubs, '2024-25', 1, 'active']
-      );
-    }
+  //   // Insert divisions
+  //   for (const division of divisions) {
+  //     await this.db.run(
+  //       `INSERT OR REPLACE INTO divisions (id, name, country_id, tier, clubs, season, matchday, status)
+  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  //       [division.id, division.name, division.countryId, division.tier, division.clubs, '2024-25', 1, 'active']
+  //     );
+  //   }
 
-    // Insert clubs
-    for (const club of clubs) {
-      const transferBudget = club.balance === 'rich' ? 5000000 : club.balance === 'average' ? 2000000 : 500000;
-      const wageBudget = Math.round(transferBudget * 0.6);
+  //   // Insert clubs
+  //   for (const club of clubs) {
+  //     const transferBudget = club.balance === 'rich' ? 5000000 : club.balance === 'average' ? 2000000 : 500000;
+  //     const wageBudget = Math.round(transferBudget * 0.6);
 
-      await this.db.run(
-        `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
-         reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
-         'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
-      );
-    }
+  //     await this.db.run(
+  //       `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
+  //        reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
+  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  //       [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
+  //        'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
+  //     );
+  //   }
 
-    // Insert league tables
-    Object.entries(tablesData.default).forEach(async ([divisionId, tableData]: [string, any]) => {
-      if (divisions.find(d => d.id === divisionId)) {
-        for (const [index, team] of tableData.table.entries()) {
-          await this.db!.run(
-            `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
-             goals_for, goals_against, goal_difference, points, form, position)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
-             team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
-          );
-        }
-      }
-    });
+  //   // Insert league tables
+  //   Object.entries(tablesData.default).forEach(async ([divisionId, tableData]: [string, any]) => {
+  //     if (divisions.find(d => d.id === divisionId)) {
+  //       for (const [index, team] of tableData.table.entries()) {
+  //         await this.db!.run(
+  //           `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
+  //            goals_for, goals_against, goal_difference, points, form, position)
+  //            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  //           [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
+  //            team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
+  //         );
+  //       }
+  //     }
+  //   });
 
-    // Generate and insert players
-    console.log('Generating players...');
-    const playersData = await import('../../assets/players.json');
-    const players = generateAllPlayers(clubs, countries, playersData.default, {
-      playersPerClub: 25,
-      freeAgentCount: 100,
-      currentSeason: '2024-25',
-      injuryProbability: 0.15
-    });
+  //   // Generate and insert players
+  //   console.log('Generating players...');
+  //   const playersData = await import('../../assets/players.json');
+  //   const players = generateAllPlayers(clubs, countries, playersData.default, {
+  //     playersPerClub: 25,
+  //     freeAgentCount: 100,
+  //     currentSeason: '2024-25',
+  //     injuryProbability: 0.15
+  //   });
 
-    for (const player of players) {
-      await this.db.run(
-        `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
-         rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
-         player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
-         player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
-         '2026-06-30', 75, 100, 70]
-      );
+  //   for (const player of players) {
+  //     await this.db.run(
+  //       `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
+  //        rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
+  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  //       [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
+  //        player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
+  //        player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
+  //        '2026-06-30', 75, 100, 70]
+  //     );
 
-      // Insert injuries if any
-      for (const injury of player.injuries) {
-        const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        await this.db.run(
-          `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
-        );
-      }
-    }
+  //     // Insert injuries if any
+  //     for (const injury of player.injuries) {
+  //       const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+  //       await this.db.run(
+  //         `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
+  //          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  //         [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
+  //       );
+  //     }
+  //   }
 
-    console.log('Game data loaded successfully');
-  }
+  //   console.log('Game data loaded successfully');
+  // }
 
   // ===== LEAGUE TABLE OPERATIONS =====
 

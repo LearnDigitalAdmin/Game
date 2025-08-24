@@ -246,7 +246,7 @@ export default function App() {
   // Render with debug logs
   if (gameState === "landing") {
     console.log('Rendering LandingScreen'); // DEBUG LOG
-    return <LandingScreen setGameState={setGameState} />;
+    return <LandingScreen setGameState={setGameState}/>;
   }
   
   if (gameState === "modeSelect") {
