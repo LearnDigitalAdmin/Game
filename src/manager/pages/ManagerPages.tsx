@@ -8,7 +8,7 @@ import { FixturesPanel } from "../fixtures/FixturesPanel";
 import { TacticsPanel } from "../tactics/TacticsPanel";
 import { TransfersPanel } from "../transfers/TransfersPanel";
 import { FootballManagerDB } from "../../global/database/Save";
-import CalendarView from "../../global/calendar/CalendarView";
+import IntegratedCalendarView from "../../global/calendar/CalendarView";
 
 export function ManagerPages({ 
   page, 
@@ -74,7 +74,7 @@ export function ManagerPages({
     return (
       <>
         <Header title="Settings" subtitle="Preferences" />
-        <CalendarView />
+        <IntegratedCalendarView />
       </>
     );
 

@@ -122,7 +122,7 @@ export interface GameState {
   currentDate: string;
   currentSeason: string;
   currentMatchday: number;
-  gameSpeed: 'paused' | 'slow' | 'normal' | 'fast';
+  gameSpeed: "paused" | "slow" | "fast" | "faster" | "holiday" | "normal";//'paused' | 'slow' | 'normal' | 'fast';
   autoSave: boolean;
   notifications: any[];
 }
