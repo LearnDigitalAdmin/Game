@@ -1,11 +1,12 @@
 import { Calendar } from "lucide-react";
-import { SettingsPanel } from "../../global/settings/SettingsPanel";
+// import { SettingsPanel } from "../../global/settings/SettingsPanel";
 import { OwnerDashboard } from "../dashboard/OwnerDashboard";
 import { StadiumPanel } from "../facilities/StadiumPanel";
 import { FinancePanel } from "../finances/FinancePanel";
 import { MediaPanel } from "../media/MediaPanel";
 import { StaffPanel } from "../staff/StaffPanel";
 import { BoardTransfers } from "../transfers/BoardTransfers";
+import CalendarView from "../../global/calendar/CalendarView";
 
 export function OwnerPages({ page, palette }: { page: string; palette: any }) {
   const Header = ({ title, subtitle }: { title: string; subtitle: string }) => (
@@ -61,7 +62,7 @@ export function OwnerPages({ page, palette }: { page: string; palette: any }) {
     return (
       <>
         <Header title="Settings" subtitle="Preferences" />
-        <SettingsPanel />
+        <CalendarView />
       </>
     );
 

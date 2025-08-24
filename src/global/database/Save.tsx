@@ -472,6 +472,8 @@ async createSave(saveData: {
 
 // ===== HIGH-SPEED LOAD GAME DATA METHOD =====
 
+// Fix for the loadGameDataFast method in Save.tsx
+
 private async loadGameDataFast(selectedCountries: string[], _userClub: any): Promise<void> {
   if (!this.db) throw new Error('Database not initialized');
 
@@ -484,8 +486,12 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
       import('../../assets/divisions.json'),
       import('../../assets/clubs.json'),
       import('../../assets/tables.json'),
-      import('../../assets/players.json')
+      import('../../assets/players.json')  // This contains the name data
     ]);
+
+    // Extract the actual data (handle .default if needed)
+    const playerNamesData = playersData.default || playersData;
+    console.log('Loaded player names for countries:', Object.keys(playerNamesData));
 
     const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
     const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
@@ -533,11 +539,15 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
         const table = (tableData as any).table;
         for (let index = 0; index < table.length; index++) {
           const team = table[index];
+          
+          // The team name is already in the JSON - use it directly!
+          const teamName = team.name || `Team ${team.teamId}`;
+          
           tableStatements.push({
             statement: `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
                         goals_for, goals_against, goal_difference, points, form, position)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            values: [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
+            values: [`${divisionId}_${team.teamId}`, divisionId, team.teamId, teamName, team.played, team.won, team.drawn, 
                     team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
           });
         }
@@ -549,8 +559,10 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
     }
 
     // === GENERATE AND BULK INSERT PLAYERS ===
-    console.log('Generating players...');
-    const players = generateAllPlayers(clubs, countries, playersData.default, {
+    console.log('Generating players with proper name data...');
+    
+    // THIS IS THE KEY FIX: Pass the loaded player names data
+    const players = generateAllPlayers(clubs, countries, playerNamesData, {
       playersPerClub: 25,
       freeAgentCount: 100,
       currentSeason: '2024-25',
@@ -563,6 +575,17 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
     await this.bulkInsertPlayers(players);
 
     console.log('All game data loaded at high speed!');
+    
+    // Debug: Check what got inserted
+    try {
+      const samplePlayers = await this.db.query('SELECT first_name, last_name, country_id, position FROM players LIMIT 5');
+      console.log('Sample inserted players:', samplePlayers.values);
+      
+      const sampleTeams = await this.db.query('SELECT team_name, division_id FROM league_tables LIMIT 5');
+      console.log('Sample inserted teams:', sampleTeams.values);
+    } catch (debugError) {
+      console.error('Debug query error:', debugError);
+    }
     
   } catch (error) {
     console.error('Error loading game data:', error);
@@ -738,110 +761,259 @@ async createSaveFast(saveData: {
     console.log(`Save deleted: ${saveId}`);
   }
 
-  // ===== GAME DATA LOADING =====
-
-  // private async loadGameData(selectedCountries: string[], _userClub: any): Promise<void> {
-  //   if (!this.db) throw new Error('Database not initialized');
-
-  //   // Load countries data
-  //   const countriesData = await import('../../assets/countries.json');
-  //   const countries = countriesData.default.filter((c: any) => selectedCountries.includes(c.id));
-
-  //   // Load divisions data
-  //   const divisionsData = await import('../../assets/divisions.json');
-  //   const divisions = divisionsData.default.filter((d: any) => selectedCountries.includes(d.countryId));
-
-  //   // Load clubs data
-  //   const clubsData = await import('../../assets/clubs.json');
-  //   const clubs = clubsData.default.filter((c: any) => selectedCountries.includes(c.countryId));
-
-  //   // Load tables data
-  //   const tablesData = await import('../../assets/tables.json');
-
-  //   // Insert divisions
-  //   for (const division of divisions) {
-  //     await this.db.run(
-  //       `INSERT OR REPLACE INTO divisions (id, name, country_id, tier, clubs, season, matchday, status)
-  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  //       [division.id, division.name, division.countryId, division.tier, division.clubs, '2024-25', 1, 'active']
-  //     );
-  //   }
-
-  //   // Insert clubs
-  //   for (const club of clubs) {
-  //     const transferBudget = club.balance === 'rich' ? 5000000 : club.balance === 'average' ? 2000000 : 500000;
-  //     const wageBudget = Math.round(transferBudget * 0.6);
-
-  //     await this.db.run(
-  //       `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
-  //        reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
-  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  //       [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
-  //        'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
-  //     );
-  //   }
-
-  //   // Insert league tables
-  //   Object.entries(tablesData.default).forEach(async ([divisionId, tableData]: [string, any]) => {
-  //     if (divisions.find(d => d.id === divisionId)) {
-  //       for (const [index, team] of tableData.table.entries()) {
-  //         await this.db!.run(
-  //           `INSERT OR REPLACE INTO league_tables (id, division_id, team_id, team_name, played, won, drawn, lost, 
-  //            goals_for, goals_against, goal_difference, points, form, position)
-  //            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  //           [`${divisionId}_${team.teamId}`, divisionId, team.teamId, team.name, team.played, team.won, team.drawn, 
-  //            team.lost, team.gf, team.ga, team.gd, team.points, team.form, index + 1]
-  //         );
-  //       }
-  //     }
-  //   });
-
-  //   // Generate and insert players
-  //   console.log('Generating players...');
-  //   const playersData = await import('../../assets/players.json');
-  //   const players = generateAllPlayers(clubs, countries, playersData.default, {
-  //     playersPerClub: 25,
-  //     freeAgentCount: 100,
-  //     currentSeason: '2024-25',
-  //     injuryProbability: 0.15
-  //   });
-
-  //   for (const player of players) {
-  //     await this.db.run(
-  //       `INSERT INTO players (id, first_name, last_name, age, country_id, club_id, position, secondary_position,
-  //        rating, potential, value, wage, height, weight, foot, personality, form, contract_end, morale, fitness, match_sharpness)
-  //        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  //       [player.id, player.firstName, player.lastName, player.age, player.countryId, player.clubId, 
-  //        player.position, player.secondaryPosition, player.rating, player.potential, player.value, 
-  //        player.wage, player.height, player.weight, player.foot, player.personality, player.form, 
-  //        '2026-06-30', 75, 100, 70]
-  //     );
-
-  //     // Insert injuries if any
-  //     for (const injury of player.injuries) {
-  //       const injuryId = `inj_${player.id}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-  //       await this.db.run(
-  //         `INSERT INTO player_injuries (id, player_id, type, severity, duration, recurring, date_occurred)
-  //          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  //         [injuryId, player.id, injury.type, injury.severity, injury.duration, injury.recurring ? 1 : 0, '2024-08-01']
-  //       );
-  //     }
-  //   }
-
-  //   console.log('Game data loaded successfully');
-  // }
-
   // ===== LEAGUE TABLE OPERATIONS =====
 
-  async getLeagueTable(divisionId: string): Promise<LeagueTable[]> {
-    if (!this.db) throw new Error('Database not initialized');
+  // Add this helper function to Save.tsx - converts snake_case to camelCase
 
-    const result = await this.db.query(
-      'SELECT * FROM league_tables WHERE division_id = ? ORDER BY points DESC, goal_difference DESC, goals_for DESC',
-      [divisionId]
-    );
-    return result.values || [];
+private convertDbRowToCamelCase(row: any): any {
+  if (!row) return row;
+  
+  const converted: any = {};
+  
+  for (const [key, value] of Object.entries(row)) {
+    // Convert snake_case to camelCase
+    const camelKey = key.replace(/_([a-z])/g, (_match, letter) => letter.toUpperCase());
+    converted[camelKey] = value;
   }
+  
+  return converted;
+}
+
+private convertDbResultsToCamelCase(results: any[]): any[] {
+  if (!Array.isArray(results)) return results;
+  return results.map(row => this.convertDbRowToCamelCase(row));
+}
+
+// Update all your database query methods to use the converter:
+
+// === UPDATED LEAGUE TABLE METHOD ===
+async getLeagueTable(divisionId: string): Promise<LeagueTable[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  console.log(`🎯 Getting league table for division: ${divisionId}`);
+  
+  const result = await this.db.query(
+    'SELECT * FROM league_tables WHERE division_id = ? ORDER BY points DESC, goal_difference DESC, goals_for DESC',
+    [divisionId]
+  );
+  
+  console.log(`🎯 Raw league table data:`, result.values?.slice(0, 2)); // Log first 2 rows
+  
+  const convertedResults = this.convertDbResultsToCamelCase(result.values || []);
+  
+  console.log(`🎯 Converted league table data:`, convertedResults.slice(0, 2)); // Log converted data
+  
+  return convertedResults;
+}
+
+// === UPDATED CLUB PLAYERS METHOD ===
+async getClubPlayers(clubId: string): Promise<Player[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  console.log(`🎯 Getting players for club: ${clubId}`);
+  
+  const result = await this.db.query(
+    'SELECT * FROM players WHERE club_id = ? ORDER BY rating DESC, position ASC',
+    [clubId]
+  );
+  
+  console.log(`🎯 Raw player data sample:`, result.values?.slice(0, 2)); // Log first 2 players
+  
+  const convertedResults = this.convertDbResultsToCamelCase(result.values || []);
+  
+  console.log(`🎯 Converted player data sample:`, convertedResults.slice(0, 2)); // Log converted data
+  
+  return convertedResults;
+}
+
+// === UPDATED GET FREE AGENTS METHOD ===
+async getFreeAgents(): Promise<Player[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM players WHERE club_id IS NULL ORDER BY rating DESC',
+    []
+  );
+  
+  console.log(`🎯 Raw free agent data sample:`, result.values?.slice(0, 2));
+  
+  const convertedResults = this.convertDbResultsToCamelCase(result.values || []);
+  
+  console.log(`🎯 Converted free agent data sample:`, convertedResults.slice(0, 2));
+  
+  return convertedResults;
+}
+
+// === UPDATED GET CLUB METHOD ===
+async getClub(clubId: string): Promise<ClubData | null> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM clubs WHERE id = ?',
+    [clubId]
+  );
+  
+  const rawData = result.values?.[0];
+  console.log(`🎯 Raw club data:`, rawData);
+  
+  const convertedData = rawData ? this.convertDbRowToCamelCase(rawData) : null;
+  console.log(`🎯 Converted club data:`, convertedData);
+  
+  return convertedData;
+}
+
+// === UPDATED GET PLAYER METHOD ===
+async getPlayer(playerId: string): Promise<Player | null> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM players WHERE id = ?',
+    [playerId]
+  );
+  
+  const rawData = result.values?.[0];
+  const convertedData = rawData ? this.convertDbRowToCamelCase(rawData) : null;
+  
+  return convertedData;
+}
+
+// === UPDATED SEARCH PLAYERS METHOD ===
+async searchPlayers(query: string, clubId?: string, position?: string, minRating?: number, maxValue?: number): Promise<Player[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  let sql = `SELECT * FROM players WHERE (first_name LIKE ? OR last_name LIKE ?)`;
+  let params: any[] = [`%${query}%`, `%${query}%`];
+
+  if (clubId) {
+    sql += ` AND club_id = ?`;
+    params.push(clubId);
+  }
+
+  if (position) {
+    sql += ` AND (position = ? OR secondary_position = ?)`;
+    params.push(position, position);
+  }
+
+  if (minRating) {
+    sql += ` AND rating >= ?`;
+    params.push(minRating);
+  }
+
+  if (maxValue) {
+    sql += ` AND value <= ?`;
+    params.push(maxValue);
+  }
+
+  sql += ` ORDER BY rating DESC LIMIT 50`;
+
+  const result = await this.db.query(sql, params);
+  return this.convertDbResultsToCamelCase(result.values || []);
+}
+
+// === UPDATED GET DIVISIONS METHOD ===
+async getDivisions(countryId?: string): Promise<Division[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  let query = 'SELECT * FROM divisions';
+  let params: any[] = [];
+
+  if (countryId) {
+    query += ' WHERE country_id = ?';
+    params.push(countryId);
+  }
+
+  query += ' ORDER BY tier ASC';
+
+  const result = await this.db.query(query, params);
+  return this.convertDbResultsToCamelCase(result.values || []);
+}
+
+// === UPDATED GET CLUB STAFF METHOD ===
+async getClubStaff(clubId: string): Promise<any[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM staff WHERE club_id = ? ORDER BY role ASC',
+    [clubId]
+  );
+  return this.convertDbResultsToCamelCase(result.values || []);
+}
+
+// === UPDATED GET TRANSFERS METHOD ===
+async getTransfers(clubId?: string, status?: string): Promise<Transfer[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  let query = 'SELECT * FROM transfers';
+  let params: any[] = [];
+  const conditions: string[] = [];
+
+  if (clubId) {
+    conditions.push('(from_club_id = ? OR to_club_id = ?)');
+    params.push(clubId, clubId);
+  }
+
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ' ORDER BY date DESC';
+
+  const result = await this.db.query(query, params);
+  return this.convertDbResultsToCamelCase(result.values || []);
+}
+
+// === UPDATED GET MANAGER METHOD ===
+async getManager(): Promise<ManagerData | null> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM managers LIMIT 1',
+    []
+  );
+  
+  const rawData = result.values?.[0];
+  return rawData ? this.convertDbRowToCamelCase(rawData) : null;
+}
+
+// === UPDATED GET GAME STATE METHOD ===
+async getGameState(): Promise<GameState | null> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(
+    'SELECT * FROM game_state WHERE id = "main"',
+    []
+  );
+  
+  const rawData = result.values?.[0];
+  const convertedData = rawData ? this.convertDbRowToCamelCase(rawData) : null;
+  
+  // Handle JSON parsing for notifications
+  if (convertedData && convertedData.notifications && typeof convertedData.notifications === 'string') {
+    try {
+      convertedData.notifications = JSON.parse(convertedData.notifications);
+    } catch (e) {
+      convertedData.notifications = [];
+    }
+  }
+  
+  return convertedData;
+}
+
+
+
+
+
+
+
+
+
+
+  
 
   async updateLeagueTable(divisionId: string, teamId: string, updates: Partial<LeagueTable>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -970,36 +1142,6 @@ async createSaveFast(saveData: {
   }
 
   // ===== PLAYER OPERATIONS =====
-
-  async getClubPlayers(clubId: string): Promise<Player[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM players WHERE club_id = ? ORDER BY rating DESC, position ASC',
-      [clubId]
-    );
-    return result.values || [];
-  }
-
-  async getFreeAgents(): Promise<Player[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM players WHERE club_id IS NULL ORDER BY rating DESC',
-      []
-    );
-    return result.values || [];
-  }
-
-  async getPlayer(playerId: string): Promise<Player | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM players WHERE id = ?',
-      [playerId]
-    );
-    return result.values?.[0] || null;
-  }
 
   async updatePlayer(playerId: string, updates: Partial<Player>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -1135,16 +1277,6 @@ async createSaveFast(saveData: {
 
   // ===== CLUB OPERATIONS =====
 
-  async getClub(clubId: string): Promise<ClubData | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM clubs WHERE id = ?',
-      [clubId]
-    );
-    return result.values?.[0] || null;
-  }
-
   async updateClub(clubId: string, updates: Partial<ClubData>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1180,16 +1312,6 @@ async createSaveFast(saveData: {
 
   // ===== MANAGER OPERATIONS =====
 
-  async getManager(): Promise<ManagerData | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM managers LIMIT 1',
-      []
-    );
-    return result.values?.[0] || null;
-  }
-
   async updateManager(updates: Partial<ManagerData>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1212,16 +1334,6 @@ async createSaveFast(saveData: {
   }
 
   // ===== GAME STATE OPERATIONS =====
-
-  async getGameState(): Promise<GameState | null> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM game_state WHERE id = "main"',
-      []
-    );
-    return result.values?.[0] || null;
-  }
 
   async updateGameState(updates: Partial<GameState>): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
@@ -1246,38 +1358,6 @@ async createSaveFast(saveData: {
 
   // ===== SEARCH OPERATIONS =====
 
-  async searchPlayers(query: string, clubId?: string, position?: string, minRating?: number, maxValue?: number): Promise<Player[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    let sql = `SELECT * FROM players WHERE (first_name LIKE ? OR last_name LIKE ?)`;
-    let params: any[] = [`%${query}%`, `%${query}%`];
-
-    if (clubId) {
-      sql += ` AND club_id = ?`;
-      params.push(clubId);
-    }
-
-    if (position) {
-      sql += ` AND (position = ? OR secondary_position = ?)`;
-      params.push(position, position);
-    }
-
-    if (minRating) {
-      sql += ` AND rating >= ?`;
-      params.push(minRating);
-    }
-
-    if (maxValue) {
-      sql += ` AND value <= ?`;
-      params.push(maxValue);
-    }
-
-    sql += ` ORDER BY rating DESC LIMIT 50`;
-
-    const result = await this.db.query(sql, params);
-    return result.values || [];
-  }
-
   async getPlayerStats(playerId: string, season?: string): Promise<any> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1297,35 +1377,6 @@ async createSaveFast(saveData: {
 
   // ===== DIVISION OPERATIONS =====
 
-  async getDivisions(countryId?: string): Promise<Division[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    let query = 'SELECT * FROM divisions';
-    let params: any[] = [];
-
-    if (countryId) {
-      query += ' WHERE country_id = ?';
-      params.push(countryId);
-    }
-
-    query += ' ORDER BY tier ASC';
-
-    const result = await this.db.query(query, params);
-    return result.values || [];
-  }
-
-  // ===== STAFF OPERATIONS =====
-
-  async getClubStaff(clubId: string): Promise<any[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query(
-      'SELECT * FROM staff WHERE club_id = ? ORDER BY role ASC',
-      [clubId]
-    );
-    return result.values || [];
-  }
-
   async addStaff(clubId: string, staffData: any): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
@@ -1336,35 +1387,6 @@ async createSaveFast(saveData: {
       [staffId, clubId, staffData.name, staffData.role, staffData.age, staffData.nationality, 
        staffData.rating, staffData.wage, staffData.contractEnd]
     );
-  }
-
-  // ===== TRANSFER OPERATIONS =====
-
-  async getTransfers(clubId?: string, status?: string): Promise<Transfer[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    let query = 'SELECT * FROM transfers';
-    let params: any[] = [];
-    const conditions: string[] = [];
-
-    if (clubId) {
-      conditions.push('(from_club_id = ? OR to_club_id = ?)');
-      params.push(clubId, clubId);
-    }
-
-    if (status) {
-      conditions.push('status = ?');
-      params.push(status);
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    query += ' ORDER BY date DESC';
-
-    const result = await this.db.query(query, params);
-    return result.values || [];
   }
 
   // ===== UTILITY OPERATIONS =====

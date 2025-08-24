@@ -1,6 +1,6 @@
 // PlayerGenerator.tsx - Football Management Game Player Generation Module
 import { v4 as uuidv4 } from 'uuid';
-import playersData from "../../assets/players.json";
+// import playersData from "../../assets/players.json";
 
 // ===== INTERFACES =====
 
@@ -172,6 +172,57 @@ const POSITION_PHYSICAL = {
 /**
  * Generate random number between min and max (inclusive)
  */
+function getPlayerNamesData(): PlayerNames {
+  try {
+    // Since the data is loaded dynamically in loadGameDataFast, we should receive it as parameter
+    // For now, let's create a fallback that works with your JSON structure
+    console.log('getPlayerNamesData called - using fallback approach');
+    return {};
+  } catch (error) {
+    console.error('Error loading players data:', error);
+    return {};
+  }
+}
+
+// Updated generateAllPlayers function to properly use the loaded data
+
+
+// Fixed generatePlayerName function (the structure in your JSON is correct)
+function generatePlayerName(countryId: string, playerNames: PlayerNames): { firstName: string; lastName: string } {
+  console.log(`Generating name for country: ${countryId}`);
+  
+  // Get names for this country
+  const countryNames = playerNames[countryId];
+  
+  if (countryNames && countryNames.firstNames && countryNames.lastNames && 
+      countryNames.firstNames.length > 0 && countryNames.lastNames.length > 0) {
+    
+    console.log(`Using names for ${countryId}: ${countryNames.firstNames.length} first, ${countryNames.lastNames.length} last`);
+    
+    return {
+      firstName: randomFromArray(countryNames.firstNames),
+      lastName: randomFromArray(countryNames.lastNames)
+    };
+  }
+  
+  // Log what we actually received
+  console.warn(`No valid names for country ${countryId}. Received:`, countryNames);
+  console.warn(`Available countries in data:`, Object.keys(playerNames));
+  
+  // Use fallback names
+  return {
+    firstName: randomFromArray(FALLBACK_NAMES.firstNames),
+    lastName: randomFromArray(FALLBACK_NAMES.lastNames)
+  };
+}
+
+
+
+
+
+
+
+
 function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -181,25 +232,6 @@ function randomBetween(min: number, max: number): number {
  */
 function randomFromArray<T>(array: T[]): T {
   return array[Math.floor(Math.random() * array.length)];
-}
-
-/**
- * Safely get player names data with proper error handling and validation
- */
-function getPlayerNamesData(): PlayerNames {
-  try {
-    // Check if playersData is properly imported and has expected structure
-    if (playersData && typeof playersData === 'object') {
-      console.log('Players data loaded successfully:', Object.keys(playersData));
-      return playersData as PlayerNames;
-    } else {
-      console.warn('Players data not found or invalid structure, using fallback names');
-      return {};
-    }
-  } catch (error) {
-    console.error('Error loading players data:', error);
-    return {};
-  }
 }
 
 /**
@@ -377,36 +409,6 @@ function generateInjury(): Injury | null {
 }
 
 /**
- * Generate player name from country pool with improved fallback handling
- */
-function generatePlayerName(countryId: string, playerNames: PlayerNames): { firstName: string; lastName: string } {
-  // First try to get names from the provided country data
-  const countryNames = playerNames[countryId];
-  
-  if (countryNames && 
-      countryNames.firstNames && 
-      countryNames.lastNames && 
-      countryNames.firstNames.length > 0 && 
-      countryNames.lastNames.length > 0) {
-    
-    console.log(`Using names for country: ${countryId}`);
-    return {
-      firstName: randomFromArray(countryNames.firstNames),
-      lastName: randomFromArray(countryNames.lastNames)
-    };
-  }
-  
-  // Log missing country data for debugging
-  console.warn(`No name data found for country: ${countryId}, using fallback names`);
-  
-  // Use fallback names
-  return {
-    firstName: randomFromArray(FALLBACK_NAMES.firstNames),
-    lastName: randomFromArray(FALLBACK_NAMES.lastNames)
-  };
-}
-
-/**
  * Distribute positions across squad
  */
 function generateSquadPositions(squadSize: number): Position[] {
@@ -440,6 +442,12 @@ function generateSquadPositions(squadSize: number): Position[] {
 /**
  * Generate a single player
  */
+
+
+
+
+
+
 function generatePlayer(
   club: Club | null,
   position: Position,
@@ -533,7 +541,7 @@ function generateFreeAgents(
 export function generateAllPlayers(
   clubs: Club[],
   countries: Country[],
-  playerNamesParam?: PlayerNames,
+  playerNamesParam?: PlayerNames, // This should be the loaded JSON data
   config: Partial<GenerationConfig> = {}
 ): Player[] {
   const finalConfig: GenerationConfig = {
@@ -544,11 +552,12 @@ export function generateAllPlayers(
     ...config
   };
   
-  // Use provided playerNames or load from JSON with fallback
-  const playerNames = playerNamesParam || getPlayerNamesData();
+  // Use the provided playerNames data directly (this comes from the database loading)
+  const playerNames = playerNamesParam || {};
   
   console.log(`Starting player generation for ${clubs.length} clubs...`);
-  console.log(`Available countries in name data: ${Object.keys(playerNames).join(', ')}`);
+  console.log(`Player names data received:`, Object.keys(playerNames));
+  console.log(`Sample country data (KEN):`, playerNames['KEN']);
   
   const startTime = Date.now();
   const allPlayers: Player[] = [];
@@ -577,7 +586,7 @@ export function generateAllPlayers(
   console.log(`Average rating: ${Math.round(allPlayers.reduce((sum, p) => sum + p.rating, 0) / allPlayers.length)}`);
   
   // Log sample of generated names for verification
-  const samplePlayers = allPlayers.slice(0, 5);
+  const samplePlayers = allPlayers.slice(0, 10);
   console.log('Sample generated players:');
   samplePlayers.forEach(p => {
     console.log(`${p.firstName} ${p.lastName} (${p.countryId}) - ${p.position} - Rating: ${p.rating}`);

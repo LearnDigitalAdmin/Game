@@ -5,7 +5,8 @@ import { TrainingPlan } from "../training/TrainingPlan";
 import { RecentMatches } from "../matches/RecentMatches";
 import { CareerPanel } from "../career/CareerPanel";
 import { AgentOffers } from "../agent/AgentOffers";
-import { SettingsPanel } from "../../global/settings/SettingsPanel";
+// import { SettingsPanel } from "../../global/settings/SettingsPanel";
+import CalendarView from "../../global/calendar/CalendarView";
 
 export function PlayerPages({ page, palette }: { page: string; palette: any }) {
   const Header = ({ title, subtitle }: { title: string; subtitle: string }) => (
@@ -54,7 +55,7 @@ export function PlayerPages({ page, palette }: { page: string; palette: any }) {
     return (
       <>
         <Header title="Settings" subtitle="Preferences" />
-        <SettingsPanel />
+        <CalendarView />
       </>
     );
 

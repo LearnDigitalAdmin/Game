@@ -2,12 +2,13 @@
 import { Calendar } from "lucide-react";
 import { ManagerDashboard } from "../dashboard/ManagerDashboard";
 import { SquadPanel } from "../squad/SquadPanel";
-import { SettingsPanel } from "../../global/settings/SettingsPanel";
+// import { SettingsPanel } from "../../global/settings/SettingsPanel";
 import { ClubPanel } from "../club/ClubPanel";
 import { FixturesPanel } from "../fixtures/FixturesPanel";
 import { TacticsPanel } from "../tactics/TacticsPanel";
 import { TransfersPanel } from "../transfers/TransfersPanel";
 import { FootballManagerDB } from "../../global/database/Save";
+import CalendarView from "../../global/calendar/CalendarView";
 
 export function ManagerPages({ 
   page, 
@@ -73,7 +74,7 @@ export function ManagerPages({
     return (
       <>
         <Header title="Settings" subtitle="Preferences" />
-        <SettingsPanel />
+        <CalendarView />
       </>
     );
 
