@@ -1,5 +1,5 @@
 //module - global/sidebar/SidebarConfig.tsx
-import { Home, Users, Trophy, Briefcase, Settings, User, Target, Mail, Shield, DollarSign, LineChart, Building2, Flag, Star } from "lucide-react";
+import { Home, Users, Trophy, Briefcase, CalendarDays, User, Target, Mail, Shield, DollarSign, LineChart, Building2, Flag, Star } from "lucide-react";
 import type { Mode, NavItem } from "../types/GameTypes";
 
 const palettes = () => ({
@@ -45,7 +45,7 @@ export function getSidebarConfig(mode: Mode) {
         { key: "matches", label: "Matches", icon: <Flag className="w-4 h-4" /> },
         { key: "career", label: "Career", icon: <Briefcase className="w-4 h-4" /> },
         { key: "agent", label: "Agent", icon: <Mail className="w-4 h-4" /> },
-        { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+        { key: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
       ] as NavItem[],
     };
   if (mode === "manager")
@@ -59,7 +59,7 @@ export function getSidebarConfig(mode: Mode) {
         { key: "transfers", label: "Transfers", icon: <DollarSign className="w-4 h-4" /> },
         { key: "matches", label: "Matches", icon: <Trophy className="w-4 h-4" /> },
         { key: "club", label: "Club", icon: <Shield className="w-4 h-4" /> },
-        { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+        { key: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
       ] as NavItem[],
     };
   if (mode === "owner")
@@ -73,7 +73,7 @@ export function getSidebarConfig(mode: Mode) {
         { key: "staff", label: "Staff", icon: <Users className="w-4 h-4" /> },
         { key: "transfers", label: "Transfers", icon: <DollarSign className="w-4 h-4" /> },
         { key: "media", label: "Media", icon: <Star className="w-4 h-4" /> },
-        { key: "settings", label: "Settings", icon: <Settings className="w-4 h-4" /> },
+        { key: "calendar", label: "Calendar", icon: <CalendarDays className="w-4 h-4" /> },
       ] as NavItem[],
     };
 }
@@ -95,7 +95,7 @@ export function labelFromKey(key: string) {
     stadium: "Stadium",
     staff: "Staff",
     media: "Media",
-    settings: "Settings",
+    calendar: "Calendar",
   };
   return (labels as any)[key] || key;
 }

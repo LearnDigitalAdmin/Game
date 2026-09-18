@@ -1,26 +1,26 @@
 // src/global/engine/MatchContainer.tsx
 // Main match UI container - orchestrates all match systems
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Pause, RotateCw, ZoomIn, ZoomOut, Volume2, VolumeX } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, Pause, ZoomIn, ZoomOut } from 'lucide-react';
 import { motion } from 'framer-motion';
-import {
-  MatchSetup,
-  MatchState,
-  MatchEvent,
-  PlayerLineup,
-  Formation,
-  MatchPlayer,
-} from './types/MatchTypes';
+import type { MatchSetup, MatchEvent, MatchPlayer, TeamMatchState } from './types/MatchTypes';
+import type { MatchResult } from './MatchEngine';
 import { useMatchEngine } from './hooks/useMatchEngine';
 import { PitchRenderer } from './visualizer/PitchRenderer';
-import MatchAnalytics from './analytics/MatchAnalytics';
+import type { MatchSpeed } from './MatchEngineConfig';
 
 interface MatchContainerProps {
   setup: MatchSetup;
-  onMatchComplete?: (result: any) => void;
+  onMatchComplete?: (result: MatchResult) => void;
   onClose?: () => void;
 }
+
+const SPEED_LABELS: Record<MatchSpeed, string> = {
+  fast: 'Fast',
+  default: 'Normal',
+  'hyper-realistic': 'Slow',
+};
 
 export const MatchContainer: React.FC<MatchContainerProps> = ({
   setup,
@@ -29,142 +29,133 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
 }) => {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>();
   const [showStats, setShowStats] = useState(false);
-  const [showTactical, setShowTactical] = useState(false);
   const [cameraMode, setCameraMode] = useState<'wide' | 'zoomed' | 'player-focus'>('wide');
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [notifications, setNotifications] = useState<MatchEvent[]>([]);
+  const [playerOutId, setPlayerOutId] = useState<string>();
+  const [speed, setSpeed] = useState<MatchSpeed>('default');
+  const [result, setResult] = useState<MatchResult | null>(null);
+
+  const handleEvent = useCallback((event: MatchEvent) => {
+    if (['goal', 'red-card', 'injury', 'yellow-card', 'substitution', 'full-time'].includes(event.type)) {
+      setNotifications((prev) => [...prev, event].slice(-5));
+    }
+  }, []);
+
+  const handleFinished = useCallback((matchResult: MatchResult) => {
+    setResult(matchResult);
+  }, []);
 
   const {
     matchState,
+    playerPositions,
+    ball,
     isRunning,
     isPaused,
+    isFinished,
     initializeMatch,
-    startMatch,
-    pauseMatch,
-    resumeMatch,
+    togglePlay,
     performSubstitution,
-    getCurrentMatchState,
-  } = useMatchEngine({
-    onMatchUpdate: (state) => {
-      // Real-time updates
-    },
-    onEvent: (event) => {
-      handleMatchEvent(event);
-    },
-    onFinished: (result) => {
-      handleMatchFinished(result);
-    },
-  });
+    setMatchSpeed,
+  } = useMatchEngine({ onEvent: handleEvent, onFinished: handleFinished, speed });
 
-  // Initialize match on mount
+  // The setup object is stable for the life of a fixture; guard against a new
+  // object identity restarting a match that is already under way.
+  const initializedRef = useRef<string | null>(null);
   useEffect(() => {
+    if (initializedRef.current === setup.fixture.id) return;
+    initializedRef.current = setup.fixture.id;
     initializeMatch(setup);
   }, [setup, initializeMatch]);
 
-  /**
-   * Handle match events
-   */
-  const handleMatchEvent = useCallback((event: MatchEvent) => {
-    // Add to notifications
-    if (['goal', 'red-card', 'injury', 'yellow-card'].includes(event.type)) {
-      setNotifications(prev => [...prev, event].slice(-5)); // Keep last 5
-    }
-
-    // Play sound
-    if (soundEnabled) {
-      playEventSound(event.type);
-    }
-  }, [soundEnabled]);
-
-  /**
-   * Handle match finished
-   */
-  const handleMatchFinished = useCallback((result: any) => {
-    console.log('🏁 Match completed');
-    setTimeout(() => {
-      onMatchComplete?.(result);
-    }, 2000);
-  }, [onMatchComplete]);
-
-  /**
-   * Play event sound
-   */
-  const playEventSound = (eventType: string) => {
-    // Would integrate with audio system
-    // For now, just console log
-    console.log(`🔊 Playing sound for: ${eventType}`);
+  const handleSpeedChange = (next: MatchSpeed) => {
+    setSpeed(next);
+    setMatchSpeed(next);
   };
 
   /**
-   * Handle substitution
+   * Two-step substitution: pick the player coming off, then the replacement.
    */
-  const handleSubstitution = useCallback(
-    async (playerOutId: string, playerInId: string) => {
-      await performSubstitution(playerOutId, playerInId);
-    },
-    [performSubstitution]
-  );
+  const handleSquadClick = (player: MatchPlayer, fromBench: boolean) => {
+    if (fromBench) {
+      if (playerOutId) {
+        performSubstitution(playerOutId, player.id);
+        setPlayerOutId(undefined);
+      }
+      return;
+    }
+
+    if (playerOutId === player.id) {
+      setPlayerOutId(undefined);
+    } else {
+      setPlayerOutId(player.id);
+      setSelectedPlayerId(player.id);
+    }
+  };
 
   if (!matchState) {
     return (
       <div className="w-full h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-lg">Initializing match...</p>
+          <p className="text-lg">Preparing the teams...</p>
         </div>
       </div>
     );
   }
 
+  const userTeam =
+    matchState.homeTeam.clubId === matchState.userTeamId ? matchState.homeTeam : matchState.awayTeam;
+
   return (
     <div className="w-full h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      {/* Header */}
       <div className="flex-shrink-0 bg-slate-900 border-b border-slate-700 p-4">
-        <div className="flex items-center justify-between max-w-full">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">
               {matchState.fixture.homeTeamName} vs {matchState.fixture.awayTeamName}
             </h1>
             <p className="text-slate-400 text-sm">
-              {matchState.fixture.competition} - Matchday {matchState.fixture.matchday}
+              {matchState.fixture.competition} · Matchday {matchState.fixture.matchday} ·{' '}
+              {matchState.weather.type}
             </p>
           </div>
           <div className="text-right">
             <div className="text-4xl font-bold">
               {matchState.score.home} - {matchState.score.away}
             </div>
-            <p className="text-slate-400">{Math.floor(matchState.currentMinute)}'</p>
+            <p className="text-slate-400">
+              {Math.floor(matchState.currentMinute)}&apos;{' '}
+              {isFinished ? '· Full time' : `· ${matchState.currentPeriod.replace('-', ' ')}`}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        {/* Pitch */}
-        <div className="flex-1 flex flex-col gap-4">
+        <div className="flex-1 flex flex-col gap-4 min-w-0">
           <PitchRenderer
             matchState={matchState}
-            playerPositions={[]} // Would get from engine
-            ballPosition={matchState.homeTeam.players[0]?.position || { x: 50, y: 50 }}
+            playerPositions={playerPositions}
+            ballPosition={ball?.position ?? { x: 50, y: 50 }}
             selectedPlayerId={selectedPlayerId}
             onPlayerSelect={setSelectedPlayerId}
             cameraMode={cameraMode}
           />
 
-          {/* Controls */}
-          <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex items-center justify-center gap-4">
+          <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 flex items-center gap-4 flex-wrap">
             <button
-              onClick={() => (isRunning ? pauseMatch() : startMatch())}
-              className="bg-blue-600 hover:bg-blue-700 p-2 rounded-lg transition"
+              onClick={togglePlay}
+              disabled={isFinished}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed p-2 rounded-lg transition"
             >
               {isRunning && !isPaused ? <Pause size={24} /> : <Play size={24} />}
             </button>
 
             <div className="flex gap-2">
-              {['wide', 'zoomed', 'player-focus'].map(mode => (
+              {(['wide', 'zoomed', 'player-focus'] as const).map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => setCameraMode(mode as any)}
+                  onClick={() => setCameraMode(mode)}
                   className={`px-3 py-1 rounded text-sm transition ${
                     cameraMode === mode
                       ? 'bg-blue-600 text-white'
@@ -173,47 +164,54 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
                 >
                   {mode === 'wide' && <ZoomOut size={16} className="inline mr-1" />}
                   {mode === 'zoomed' && <ZoomIn size={16} className="inline mr-1" />}
-                  {mode === 'player-focus' && '👁️'}
                   {mode}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              {(Object.keys(SPEED_LABELS) as MatchSpeed[]).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => handleSpeedChange(option)}
+                  disabled={isRunning}
+                  className={`px-3 py-1 rounded text-sm transition disabled:opacity-40 ${
+                    speed === option
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {SPEED_LABELS[option]}
                 </button>
               ))}
             </div>
 
             <div className="flex-1" />
 
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="bg-slate-800 hover:bg-slate-700 p-2 rounded-lg transition"
-            >
-              {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
-            </button>
-
-            <button
-              onClick={() => setShowStats(!showStats)}
-              className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg transition"
-            >
-              Stats
-            </button>
+            {isFinished && result && (
+              <button
+                onClick={() => onMatchComplete?.(result)}
+                className="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg transition font-semibold"
+              >
+                Continue
+              </button>
+            )}
 
             <button
               onClick={onClose}
-              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition"
+              className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg transition"
             >
               Close
             </button>
           </div>
         </div>
 
-        {/* Side panel - Player/Stats */}
-        <div className="w-80 bg-slate-900 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
-          {/* Tabs */}
+        <div className="w-80 bg-slate-900 rounded-lg border border-slate-700 overflow-hidden flex flex-col flex-shrink-0">
           <div className="flex border-b border-slate-700">
             <button
               onClick={() => setShowStats(false)}
               className={`flex-1 py-2 text-center transition ${
-                !showStats
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800'
+                !showStats ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               Squad
@@ -221,43 +219,37 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
             <button
               onClick={() => setShowStats(true)}
               className={`flex-1 py-2 text-center transition ${
-                showStats
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800'
+                showStats ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
               Stats
             </button>
           </div>
 
-          {/* Content */}
           <div className="flex-1 overflow-y-auto p-4">
             {!showStats ? (
               <SquadPanel
-                homeTeam={matchState.homeTeam}
-                awayTeam={matchState.awayTeam}
+                team={userTeam}
                 selectedPlayerId={selectedPlayerId}
-                onPlayerSelect={setSelectedPlayerId}
-                onSubstitution={handleSubstitution}
-                userTeamId={matchState.userTeamId}
+                playerOutId={playerOutId}
+                onPlayerClick={handleSquadClick}
               />
             ) : (
-              <StatsPanel matchState={matchState} />
+              <StatsPanel homeTeam={matchState.homeTeam} awayTeam={matchState.awayTeam} />
             )}
           </div>
         </div>
       </div>
 
-      {/* Notifications */}
       <div className="fixed bottom-4 right-4 space-y-2 pointer-events-none">
-        {notifications.map((notif, i) => (
+        {notifications.map((notif) => (
           <motion.div
             key={notif.id}
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 100 }}
             className="bg-slate-900 border border-slate-700 rounded-lg p-3 max-w-sm text-sm"
           >
+            <span className="text-slate-400 mr-2">{Math.floor(notif.minute)}&apos;</span>
             {notif.description}
           </motion.div>
         ))}
@@ -266,80 +258,87 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
   );
 };
 
-/**
- * Squad panel component
- */
 interface SquadPanelProps {
-  homeTeam: any;
-  awayTeam: any;
+  team: TeamMatchState;
   selectedPlayerId?: string;
-  onPlayerSelect: (id: string) => void;
-  onSubstitution: (out: string, inPlayer: string) => Promise<void>;
-  userTeamId?: string;
+  playerOutId?: string;
+  onPlayerClick: (player: MatchPlayer, fromBench: boolean) => void;
 }
 
 const SquadPanel: React.FC<SquadPanelProps> = ({
-  homeTeam,
-  awayTeam,
+  team,
   selectedPlayerId,
-  onPlayerSelect,
-  onSubstitution,
-  userTeamId,
+  playerOutId,
+  onPlayerClick,
 }) => {
-  const [substitutionMode, setSubstitutionMode] = useState(false);
-  const [playerOutId, setPlayerOutId] = useState<string>();
-
-  const isUserTeam = (teamId: string) => teamId === userTeamId;
-  const userTeam = isUserTeam(homeTeam.clubId) ? homeTeam : awayTeam;
-  const opponentTeam = isUserTeam(homeTeam.clubId) ? awayTeam : homeTeam;
+  const subsRemaining = team.maxSubstitutes - team.usedSubstitutes;
 
   return (
     <div className="space-y-4">
-      {/* User Team */}
       <div>
-        <h3 className="font-bold text-blue-400 mb-2">{userTeam.clubName}</h3>
+        <div className="flex items-baseline justify-between mb-2">
+          <h3 className="font-bold text-blue-400">{team.clubName}</h3>
+          <span className="text-xs text-slate-400">{subsRemaining} subs left</span>
+        </div>
+
+        {playerOutId && (
+          <p className="text-xs text-amber-300 mb-2">Now pick a substitute to bring on.</p>
+        )}
+
         <div className="space-y-1">
-          {userTeam.players.map((player: MatchPlayer) => (
+          {team.players.map((player) => (
             <button
               key={player.id}
-              onClick={() => {
-                if (substitutionMode && playerOutId) {
-                  onSubstitution(playerOutId, player.id);
-                  setSubstitutionMode(false);
-                  setPlayerOutId(undefined);
-                } else {
-                  onPlayerSelect(player.id);
-                }
-              }}
+              onClick={() => onPlayerClick(player, false)}
               className={`w-full text-left px-2 py-1 rounded text-sm transition ${
-                selectedPlayerId === player.id
+                playerOutId === player.id
+                  ? 'bg-amber-600 text-white'
+                  : selectedPlayerId === player.id
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
               <div className="flex items-center gap-2">
                 <span className="font-bold w-6">{player.number}</span>
-                <span className="flex-1">{player.firstName} {player.lastName}</span>
-                <span className="text-xs">{player.liveRating.toFixed(1)}/10</span>
+                <span className="w-10 text-xs text-slate-400">{player.position}</span>
+                <span className="flex-1 truncate">
+                  {player.firstName} {player.lastName}
+                </span>
+                {player.status === 'injured' && <span title="Injured">🚑</span>}
+                {player.yellowCards > 0 && player.redCards === 0 && <span title="Booked">🟨</span>}
+                {player.redCards > 0 && <span title="Sent off">🟥</span>}
+                <span className="text-xs w-8 text-right">{player.liveRating.toFixed(1)}</span>
+              </div>
+              <div className="mt-1 h-1 bg-slate-700 rounded overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500"
+                  style={{ width: `${Math.max(0, 100 - player.fatigue)}%` }}
+                />
               </div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Substitutes */}
-      {userTeam.substitutes.length > 0 && (
+      {team.substitutes.length > 0 && (
         <div>
-          <h3 className="font-bold text-amber-400 text-sm mb-2">Substitutes</h3>
+          <h3 className="font-bold text-amber-400 text-sm mb-2">Bench</h3>
           <div className="space-y-1">
-            {userTeam.substitutes.map((player: MatchPlayer) => (
-              <button
-                key={player.id}
-                className="w-full text-left px-2 py-1 rounded text-sm bg-slate-800 text-slate-400 hover:bg-slate-700 transition"
-              >
-                <span className="text-xs">{player.number}</span> {player.firstName} {player.lastName}
-              </button>
-            ))}
+            {team.substitutes.map((player) => {
+              const available = !player.isInjured && player.status === 'substituting';
+              return (
+                <button
+                  key={player.id}
+                  disabled={!available || !playerOutId || subsRemaining <= 0}
+                  onClick={() => onPlayerClick(player, true)}
+                  className="w-full text-left px-2 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  <span className="text-xs w-6 inline-block">{player.number}</span>
+                  <span className="text-xs text-slate-400 mr-2">{player.position}</span>
+                  {player.firstName} {player.lastName}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -347,59 +346,46 @@ const SquadPanel: React.FC<SquadPanelProps> = ({
   );
 };
 
-/**
- * Stats panel component
- */
 interface StatsPanelProps {
-  matchState: MatchState;
+  homeTeam: TeamMatchState;
+  awayTeam: TeamMatchState;
 }
 
-const StatsPanel: React.FC<StatsPanelProps> = ({ matchState }) => {
-  return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <h3 className="font-bold text-blue-400 mb-2">{matchState.homeTeam.clubName}</h3>
-        <div className="space-y-1 text-slate-300">
-          <div className="flex justify-between">
-            <span>Possession:</span>
-            <span>{Math.round(matchState.ballPossession.home)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Shots:</span>
-            <span>{matchState.homeTeam.shotsOnTarget}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Passes:</span>
-            <span>{matchState.homeTeam.passes}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tackles:</span>
-            <span>{matchState.homeTeam.tackles}</span>
-          </div>
-        </div>
-      </div>
+const StatsPanel: React.FC<StatsPanelProps> = ({ homeTeam, awayTeam }) => {
+  const rows: Array<{ label: string; home: string; away: string }> = [
+    {
+      label: 'Possession',
+      home: `${Math.round(homeTeam.possession)}%`,
+      away: `${Math.round(awayTeam.possession)}%`,
+    },
+    { label: 'Shots', home: `${homeTeam.shots}`, away: `${awayTeam.shots}` },
+    { label: 'On target', home: `${homeTeam.shotsOnTarget}`, away: `${awayTeam.shotsOnTarget}` },
+    { label: 'Passes', home: `${homeTeam.passes}`, away: `${awayTeam.passes}` },
+    {
+      label: 'Pass accuracy',
+      home: `${Math.round(homeTeam.passAccuracy)}%`,
+      away: `${Math.round(awayTeam.passAccuracy)}%`,
+    },
+    { label: 'Tackles', home: `${homeTeam.tackles}`, away: `${awayTeam.tackles}` },
+    { label: 'Corners', home: `${homeTeam.corners}`, away: `${awayTeam.corners}` },
+    { label: 'Fouls', home: `${homeTeam.fouls}`, away: `${awayTeam.fouls}` },
+    { label: 'Yellow cards', home: `${homeTeam.yellowCards}`, away: `${awayTeam.yellowCards}` },
+    { label: 'Red cards', home: `${homeTeam.redCards}`, away: `${awayTeam.redCards}` },
+  ];
 
-      <div className="border-t border-slate-700 pt-4">
-        <h3 className="font-bold text-red-400 mb-2">{matchState.awayTeam.clubName}</h3>
-        <div className="space-y-1 text-slate-300">
-          <div className="flex justify-between">
-            <span>Possession:</span>
-            <span>{Math.round(matchState.ballPossession.away)}%</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Shots:</span>
-            <span>{matchState.awayTeam.shotsOnTarget}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Passes:</span>
-            <span>{matchState.awayTeam.passes}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tackles:</span>
-            <span>{matchState.awayTeam.tackles}</span>
-          </div>
-        </div>
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between font-bold text-xs text-slate-400 pb-2 border-b border-slate-700">
+        <span className="text-blue-400 truncate">{homeTeam.clubName}</span>
+        <span className="text-red-400 truncate">{awayTeam.clubName}</span>
       </div>
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between text-slate-300">
+          <span className="w-10 text-right font-semibold">{row.home}</span>
+          <span className="flex-1 text-center text-xs text-slate-500">{row.label}</span>
+          <span className="w-10 text-left font-semibold">{row.away}</span>
+        </div>
+      ))}
     </div>
   );
 };

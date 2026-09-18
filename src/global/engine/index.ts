@@ -2,7 +2,8 @@
 // Main entry point for match engine exports
 
 // Core engine
-export { default as MatchEngine } from './MatchEngine';
+export { default as MatchEngine, type MatchResult } from './MatchEngine';
+export { MatchService, FORMATIONS, DEFAULT_FORMATION } from './MatchService';
 export { useMatchEngine } from './hooks/useMatchEngine';
 export { MatchContainer } from './MatchContainer';
 
@@ -24,7 +25,7 @@ export { MatchAnalytics } from './analytics/MatchAnalytics';
 export { EventRecorder } from './analytics/EventRecorder';
 
 // Match speed & configuration
-export { getMatchSpeedConfig, calculateGameMinutesPerMs, validateMatchSpeed, MATCH_SPEEDS, MATCH_SPEED_OPTIONS, MATCH_TIMING_EXAMPLES, type MatchSpeed, type MatchSpeedConfig } from '../fixtures/MatchEngineConfig';
+export { getMatchSpeedConfig, calculateGameMinutesPerMs, validateMatchSpeed, MATCH_SPEEDS, MATCH_SPEED_OPTIONS, MATCH_TIMING_EXAMPLES, type MatchSpeed, type MatchSpeedConfig } from './MatchEngineConfig';
 
 // Types
 export * from './types/MatchTypes';

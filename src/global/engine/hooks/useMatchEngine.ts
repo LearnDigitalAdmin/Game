@@ -7,166 +7,147 @@ import type {
   MatchSetup,
   Formation,
   MatchEvent,
-  MatchAnalytics,
+  PlayerPosition,
+  Ball,
 } from '../types/MatchTypes';
-import MatchEngine from '../MatchEngine';
+import MatchEngine, { type MatchResult } from '../MatchEngine';
+import type { MatchSpeed } from '../MatchEngineConfig';
 
 interface UseMatchEngineProps {
-  onMatchUpdate?: (state: MatchState) => void;
   onEvent?: (event: MatchEvent) => void;
-  onFinished?: (result: { matchState: MatchState; analytics: MatchAnalytics }) => void;
+  onFinished?: (result: MatchResult) => void;
+  speed?: MatchSpeed;
 }
 
-export const useMatchEngine = (props: UseMatchEngineProps) => {
+export const useMatchEngine = ({ onEvent, onFinished, speed = 'default' }: UseMatchEngineProps) => {
   const engineRef = useRef<MatchEngine | null>(null);
   const [matchState, setMatchState] = useState<MatchState | null>(null);
+  const [playerPositions, setPlayerPositions] = useState<PlayerPosition[]>([]);
+  const [ball, setBall] = useState<Ball | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [matchSpeed, setMatchSpeed] = useState(1);
+  const [isFinished, setIsFinished] = useState(false);
 
-  // Initialize engine on mount
-  useEffect(() => {
-    if (!engineRef.current) {
-      engineRef.current = new MatchEngine();
-      console.log('✅ Match engine initialized');
-    }
+  // Callbacks are held in refs so that changing them never tears down and
+  // re-registers the engine's listeners mid-match.
+  const onEventRef = useRef(onEvent);
+  const onFinishedRef = useRef(onFinished);
+  onEventRef.current = onEvent;
+  onFinishedRef.current = onFinished;
 
-    return () => {
-      if (engineRef.current) {
-        engineRef.current.destroy();
-      }
-    };
-  }, []);
+  if (engineRef.current === null) {
+    engineRef.current = new MatchEngine(undefined, speed);
+  }
 
-  // Register event listeners
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
 
-    const handleMatchUpdate = (state: MatchState) => {
-      setMatchState(state);
-      props.onMatchUpdate?.(state);
+    const applySnapshot = (snapshot: {
+      matchState: MatchState;
+      playerPositions: PlayerPosition[];
+      ball: Ball;
+    } | null) => {
+      if (!snapshot) return;
+      setMatchState(snapshot.matchState);
+      setPlayerPositions(snapshot.playerPositions);
+      setBall(snapshot.ball);
     };
 
-    const handleEvent = (event: MatchEvent) => {
-      props.onEvent?.(event);
+    const handleUpdate = (snapshot: any) => applySnapshot(snapshot);
+    const handleEvent = (event: MatchEvent) => onEventRef.current?.(event);
+    const handleStarted = () => {
+      setIsRunning(true);
+      setIsPaused(false);
     };
-
-    const handleFinished = (result: any) => {
+    const handlePaused = (snapshot: any) => {
+      setIsPaused(true);
+      applySnapshot(snapshot);
+    };
+    const handleResumed = () => setIsPaused(false);
+    const handleFinished = (result: MatchResult) => {
       setIsRunning(false);
       setIsPaused(false);
-      props.onFinished?.(result);
+      setIsFinished(true);
+      applySnapshot(engine.getSnapshot());
+      onFinishedRef.current?.(result);
     };
 
-    engine.on('match-update', handleMatchUpdate);
+    engine.on('match-initialized', () => applySnapshot(engine.getSnapshot()));
+    engine.on('match-update', handleUpdate);
     engine.on('match-event', handleEvent);
+    engine.on('match-started', handleStarted);
+    engine.on('match-paused', handlePaused);
+    engine.on('match-resumed', handleResumed);
     engine.on('match-finished', handleFinished);
-    engine.on('match-started', () => setIsRunning(true));
-    engine.on('match-paused', () => setIsPaused(true));
-    engine.on('match-resumed', () => setIsPaused(false));
 
     return () => {
-      engine.off('match-update', handleMatchUpdate);
-      engine.off('match-event', handleEvent);
-      engine.off('match-finished', handleFinished);
+      engine.destroy();
     };
-  }, [props]);
+  }, []);
 
-  /**
-   * Initialize match
-   */
   const initializeMatch = useCallback(async (setup: MatchSetup) => {
     const engine = engineRef.current;
     if (!engine) return;
 
     try {
       await engine.initializeMatch(setup);
-      setMatchState(engine.getMatchState());
-      console.log('✅ Match initialized');
+      setIsFinished(false);
     } catch (error) {
       console.error('Failed to initialize match:', error);
     }
   }, []);
 
-  /**
-   * Start match
-   */
   const startMatch = useCallback(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-
-    engine.startMatch();
+    engineRef.current?.startMatch();
   }, []);
 
-  /**
-   * Pause match
-   */
   const pauseMatch = useCallback(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-
-    engine.pause();
+    engineRef.current?.pause();
   }, []);
 
-  /**
-   * Resume match
-   */
   const resumeMatch = useCallback(() => {
+    engineRef.current?.resume();
+  }, []);
+
+  const togglePlay = useCallback(() => {
     const engine = engineRef.current;
     if (!engine) return;
 
-    engine.resume();
+    const { isRunning: running, isPaused: paused } = engine.getRunningState();
+    if (!running) engine.startMatch();
+    else if (paused) engine.resume();
+    else engine.pause();
   }, []);
 
-  /**
-   * Perform substitution
-   */
-  const performSubstitution = useCallback(async (playerOutId: string, playerInId: string) => {
-    const engine = engineRef.current;
-    if (!engine || !matchState) return;
-
-    try {
-      await engine.performSubstitution(playerOutId, playerInId);
-    } catch (error) {
-      console.error('Substitution failed:', error);
-    }
-  }, [matchState]);
-
-  /**
-   * Change formation/tactics
-   */
-  const changeTacticalFormation = useCallback((formation: Formation) => {
-    // This would update match state and affect simulation
-    // Implementation would be in MatchEngine
+  const performSubstitution = useCallback((playerOutId: string, playerInId: string): boolean => {
+    return engineRef.current?.performSubstitution(playerOutId, playerInId) ?? false;
   }, []);
 
-  /**
-   * Get current match state
-   */
-  const getCurrentMatchState = useCallback(() => {
-    const engine = engineRef.current;
-    return engine?.getMatchState() || null;
+  const changeFormation = useCallback((formation: Formation): boolean => {
+    return engineRef.current?.changeFormation(formation) ?? false;
+  }, []);
+
+  const setMatchSpeed = useCallback((next: MatchSpeed) => {
+    engineRef.current?.setMatchSpeed(next);
   }, []);
 
   return {
-    // State
     matchState,
+    playerPositions,
+    ball,
     isRunning,
     isPaused,
-    matchSpeed,
+    isFinished,
 
-    // Methods
     initializeMatch,
     startMatch,
     pauseMatch,
     resumeMatch,
-    setMatchSpeed,
+    togglePlay,
     performSubstitution,
-    changeTacticalFormation,
-    getCurrentMatchState,
-
-    // Engine access (careful with this)
-    engine: engineRef.current,
+    changeFormation,
+    setMatchSpeed,
   };
 };
 

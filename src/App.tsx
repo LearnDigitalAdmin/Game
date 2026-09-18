@@ -39,7 +39,6 @@ function RotationPrompt() {
 }
 
 export default function App() {
-  console.log('App component rendering'); // DEBUG LOG
   
   const [gameState, setGameState] = useState<GameState>("landing");
   const [isPortrait, setIsPortrait] = useState(false);
@@ -66,10 +65,8 @@ export default function App() {
   useEffect(() => {
     const initDatabase = async () => {
       try {
-        console.log('Initializing Football Manager Database...');
         await gameDB.initialize();
         setDbInitialized(true);
-        console.log('Database initialized successfully');
       } catch (error) {
         console.error('Failed to initialize database:', error);
         setDbError('Failed to initialize game database. Please refresh and try again.');
@@ -81,7 +78,6 @@ export default function App() {
 
   // Force landscape orientation using Screen Orientation API and fallback methods
   useEffect(() => {
-    console.log('App useEffect running'); // DEBUG LOG
     
     const forceLandscape = async () => {
       try {
@@ -151,7 +147,6 @@ export default function App() {
   };
 
   const handleManagerSetupComplete = (data: any) => {
-    console.log('Manager setup complete:', data); // DEBUG LOG
     setManagerData(prevData => ({ 
       ...prevData, 
       ...data 
@@ -160,7 +155,6 @@ export default function App() {
   };
 
   const handleLeagueSelectComplete = (selectedCountries: string[]) => {
-    console.log('League selection complete:', selectedCountries); // DEBUG LOG
     setManagerData(prevData => ({ 
       ...prevData, 
       selectedCountries 
@@ -169,7 +163,6 @@ export default function App() {
   };
 
   const handleClubSelectComplete = async (selectedClub: any) => {
-    console.log('Club selection complete:', selectedClub); // DEBUG LOG
     
     const updatedManagerData = {
       ...managerData,
@@ -224,7 +217,6 @@ export default function App() {
   // Handle loading a save file
   const handleLoadSave = async (saveData: any) => {
     try {
-      console.log('Loading save:', saveData);
       setLoadingMessage("Loading save file...");
       setGameState("loading");
 
@@ -276,8 +268,6 @@ export default function App() {
     return new Date(now.getFullYear(), 7, 1, 8, 0, 0); // August 1st, 8:00 AM
   };
 
-  console.log('Current gameState:', gameState); // DEBUG LOG
-  console.log('Current managerData:', managerData); // DEBUG LOG
 
   // Show database error if any
   if (dbError) {
@@ -317,7 +307,6 @@ export default function App() {
 
   // Render with debug logs
   if (gameState === "landing") {
-    console.log('Rendering LandingScreen'); // DEBUG LOG
     return (
       <>
         <LandingScreen 
@@ -334,22 +323,18 @@ export default function App() {
   }
   
   if (gameState === "modeSelect") {
-    console.log('Rendering ModeSelection'); // DEBUG LOG
     return <ModeSelection setGameState={setGameState} onStartManager={handleStartManager} />;
   }
   
   if (gameState === "managerSetup") {
-    console.log('Rendering ManagerSetupScreen'); // DEBUG LOG
     return <ManagerSetupScreen onComplete={handleManagerSetupComplete} />;
   }
   
   if (gameState === "managerLeagueSelect") {
-    console.log('Rendering ManagerLeagueSelection'); // DEBUG LOG
     return <ManagerLeagueSelection onComplete={handleLeagueSelectComplete} />;
   }
   
   if (gameState === "managerClubSelect") {
-    console.log('Rendering ManagerClubSelection with countries:', managerData.selectedCountries); // DEBUG LOG
     return (
       <ManagerClubSelection 
         selectedCountries={managerData.selectedCountries} 
@@ -359,7 +344,6 @@ export default function App() {
   }
   
   if (gameState === "loading") {
-    console.log('Rendering LoadingScreen with message:', loadingMessage); // DEBUG LOG
     return (
       <div className="w-screen h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
@@ -385,7 +369,6 @@ export default function App() {
   
   // Special calendar view mode (accessible from manager mode)
   if (gameState === "calendar") {
-    console.log('Rendering Calendar View'); // DEBUG LOG
     return (
       <CalendarProvider
         startFrom={getSeasonStartDate()}
@@ -397,7 +380,6 @@ export default function App() {
   }
   
   if (MODES.includes(gameState)) {
-    console.log('Rendering ModeHome with manager data and database:', managerData); // DEBUG LOG
     
     // Wrap ModeHome with CalendarProvider if calendar should be initialized
     if (calendarInitialized && managerData.selectedClub) {
@@ -430,6 +412,5 @@ export default function App() {
     );
   }
   
-  console.log('No matching gameState, returning null'); // DEBUG LOG
   return null;
 }

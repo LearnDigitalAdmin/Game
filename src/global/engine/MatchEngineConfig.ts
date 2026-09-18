@@ -83,10 +83,7 @@ export function validateMatchSpeed(speed: any): MatchSpeed {
 /**
  * All match speed configurations list
  */
-export const MATCH_SPEED_OPTIONS = Object.entries(MATCH_SPEEDS).map(([key, config]) => ({
-  speed: key,
-  ...config,
-}));
+export const MATCH_SPEED_OPTIONS: MatchSpeedConfig[] = Object.values(MATCH_SPEEDS);
 
 // Example timing calculations
 export const MATCH_TIMING_EXAMPLES = {

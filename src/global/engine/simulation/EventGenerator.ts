@@ -8,394 +8,367 @@ import type {
   EventType,
   TeamMatchState,
   MatchPlayer,
+  SimulationConfig,
 } from '../types/MatchTypes';
 
-export class EventGenerator {
-  // private config: SimulationConfig;
-  // private eventQueue: MatchEvent[] = [];
+const ATTACKING_POSITIONS = ['ST', 'LW', 'RW', 'CAM'];
+const CREATIVE_POSITIONS = ['CAM', 'CM', 'LW', 'RW'];
+const DEFENSIVE_POSITIONS = ['CB', 'LB', 'RB', 'CDM'];
 
-  // constructor(config: SimulationConfig) {
-  //   this.config = config;
-  // }
+// Per-minute base rates tuned to produce realistic 90 minute totals.
+const SHOT_CHANCE_PER_MINUTE = 0.14;
+const GOAL_CONVERSION = 0.088;
+const ON_TARGET_SHARE = 0.36;
+const BLOCKED_SHARE = 0.22;
+const FOUL_CHANCE_PER_MINUTE = 0.24;
+const YELLOW_FROM_FOUL = 0.12;
+const RED_FROM_FOUL = 0.0006;
+const CORNER_CHANCE_PER_MINUTE = 0.11;
+const POSSESSION_SWING_PER_MINUTE = 0.7;
+
+export class EventGenerator {
+  private config: SimulationConfig;
+
+  constructor(config: SimulationConfig) {
+    this.config = config;
+  }
 
   /**
-   * Generate events for this match minute
+   * Produce every event for one game minute. Both sides are evaluated
+   * independently so the stronger team genuinely creates more.
    */
-  async generateEvents(matchState: MatchState, eventsPerMinute: number): Promise<MatchEvent[]> {
+  generateMinuteEvents(matchState: MatchState, minute: number): MatchEvent[] {
     const events: MatchEvent[] = [];
 
-    // Generate events based on match dynamics
-    for (let i = 0; i < eventsPerMinute; i++) {
-      const randomValue = Math.random();
+    const homeStrength = this.effectiveStrength(matchState.homeTeam, matchState.momentum.home, true);
+    const awayStrength = this.effectiveStrength(matchState.awayTeam, matchState.momentum.away, false);
+    const total = homeStrength + awayStrength;
+    const homeShare = total > 0 ? homeStrength / total : 0.5;
 
-      if (randomValue < 0.35) {
-        // Pass event
-        const event = this.generatePassEvent(matchState);
-        if (event) events.push(event);
-      } else if (randomValue < 0.55) {
-        // Tackle/intercept
-        const event = this.generateDefensiveEvent(matchState);
-        if (event) events.push(event);
-      } else if (randomValue < 0.75) {
-        // Shot
-        const event = this.generateShotEvent(matchState);
-        if (event) events.push(event);
-      } else if (randomValue < 0.85) {
-        // Foul/yellow card
-        const event = this.generateFoulEvent(matchState);
-        if (event) events.push(event);
-      } else if (randomValue < 0.92) {
-        // Set piece (corner, free kick)
-        const event = this.generateSetPieceEvent(matchState);
-        if (event) events.push(event);
-      } else {
-        // Special event (injury, red card, etc)
-        const event = this.generateSpecialEvent(matchState);
-        if (event) events.push(event);
-      }
+    this.pushIf(events, this.generatePossessionEvent(matchState, minute, homeShare));
+    events.push(...this.generatePassEvents(matchState, minute, homeShare));
+
+    (['home', 'away'] as const).forEach((side) => {
+      const team = side === 'home' ? matchState.homeTeam : matchState.awayTeam;
+      const opponent = side === 'home' ? matchState.awayTeam : matchState.homeTeam;
+      const share = side === 'home' ? homeShare : 1 - homeShare;
+
+      this.pushIf(events, this.generateShotEvent(team, opponent, side, minute, share));
+      this.pushIf(events, this.generateFoulEvent(team, side, minute));
+      this.pushIf(events, this.generateCornerEvent(team, side, minute, share));
+      this.pushIf(events, this.generateInjuryEvent(team, side, minute));
+    });
+
+    return events;
+  }
+
+  private pushIf(events: MatchEvent[], event: MatchEvent | null): void {
+    if (event) events.push(event);
+  }
+
+  /**
+   * Squad quality adjusted for form, fatigue, morale, tactics, momentum and
+   * home advantage. This is what makes a better team win more often.
+   */
+  private effectiveStrength(team: TeamMatchState, momentum: number, isHome: boolean): number {
+    const onPitch = team.players.filter((p) => p.onPitch && p.status === 'playing');
+    if (onPitch.length === 0) return 1;
+
+    const quality =
+      onPitch.reduce((sum, p) => {
+        const formFactor = 0.85 + (p.form / 100) * 0.3;
+        const fatigueFactor = 1 - (p.fatigue / 100) * 0.25;
+        const moraleFactor = 0.92 + (p.morale / 100) * 0.16;
+        return sum + p.rating * formFactor * fatigueFactor * moraleFactor;
+      }, 0) / onPitch.length;
+
+    // A side reduced by cards loses ground proportionally.
+    const numbersFactor = onPitch.length / 11;
+    const mentalityFactor =
+      team.mentality === 'attacking' ? 1.08 : team.mentality === 'defensive' ? 0.93 : 1;
+    const momentumFactor = 1 + (momentum / 100) * 0.12;
+    const homeFactor = isHome ? 1.14 : 1;
+
+    return Math.max(1, quality * numbersFactor * mentalityFactor * momentumFactor * homeFactor);
+  }
+
+  private generatePossessionEvent(
+    matchState: MatchState,
+    minute: number,
+    homeShare: number
+  ): MatchEvent | null {
+    if (Math.random() > POSSESSION_SWING_PER_MINUTE) return null;
+
+    const side: 'home' | 'away' = Math.random() < homeShare ? 'home' : 'away';
+    const team = side === 'home' ? matchState.homeTeam : matchState.awayTeam;
+
+    return {
+      id: uuidv4(),
+      type: 'possession-change',
+      minute,
+      team: side,
+      description: `${team.clubName} work the ball back into their control.`,
+      timestamp: Date.now(),
+      isHighlight: false,
+      probability: homeShare,
+    };
+  }
+
+  /**
+   * Passing volume scales with possession share and the team's possession
+   * style, giving believable pass counts by full time.
+   */
+  private generatePassEvents(matchState: MatchState, minute: number, homeShare: number): MatchEvent[] {
+    const events: MatchEvent[] = [];
+    const perMinute = Math.max(2, Math.round(this.config.eventsPerMinute));
+
+    for (let i = 0; i < perMinute; i++) {
+      const side: 'home' | 'away' = Math.random() < homeShare ? 'home' : 'away';
+      const team = side === 'home' ? matchState.homeTeam : matchState.awayTeam;
+      const player = this.getWeightedPlayer(team, CREATIVE_POSITIONS);
+      if (!player) continue;
+
+      const styleBonus = team.formation.possession === 'possession-based' ? 0.06 : 0;
+      const weatherPenalty = matchState.weather.impact.ballControl / 500;
+      const accuracy = Math.min(0.96, 0.7 + (player.rating / 100) * 0.22 + styleBonus + weatherPenalty);
+      const completed = Math.random() < accuracy;
+      const type: EventType = completed ? 'pass' : 'miss-pass';
+
+      events.push({
+        id: uuidv4(),
+        type,
+        minute,
+        team: side,
+        player,
+        description: completed
+          ? `${player.firstName} ${player.lastName} finds a teammate.`
+          : `${player.firstName} ${player.lastName} gives the ball away.`,
+        timestamp: Date.now(),
+        isHighlight: false,
+        probability: accuracy,
+      });
     }
 
     return events;
   }
 
   /**
-   * Generate pass event
+   * Shot creation is driven by attacking strength relative to the opponent's
+   * defence, then resolved into a goal, save, miss or block.
    */
-  private generatePassEvent(matchState: MatchState): MatchEvent | null {
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
-    const player = this.getRandomPlayer(team, true);
+  private generateShotEvent(
+    team: TeamMatchState,
+    opponent: TeamMatchState,
+    side: 'home' | 'away',
+    minute: number,
+    share: number
+  ): MatchEvent | null {
+    const attackers = team.players.filter((p) => p.onPitch && p.status === 'playing');
+    if (attackers.length === 0) return null;
 
-    if (!player) return null;
+    const attackRating = this.averageRating(team, ATTACKING_POSITIONS);
+    const defenceRating = this.averageRating(opponent, DEFENSIVE_POSITIONS);
+    const balance = attackRating / Math.max(1, defenceRating);
 
-    // 80% successful pass, 20% mispass
-    const isAccurate = Math.random() < 0.8;
-    const eventType: EventType = isAccurate ? 'pass' : 'miss-pass';
+    // A deep counter-attacking side converts sustained pressure against it
+    // into breaks, but only when it is genuinely on the back foot.
+    const counterBonus = team.formation.counterAttack && share < 0.42 ? 1.1 : 1;
+    const chance = SHOT_CHANCE_PER_MINUTE * (share * 2) * balance * counterBonus;
 
-    return {
-      id: uuidv4(),
-      type: eventType,
-      minute: matchState.currentMinute,
-      team: team === matchState.homeTeam ? 'home' : 'away',
-      player,
-      description: `${player.firstName} ${player.lastName} ${isAccurate ? 'passes' : 'misses pass'}`,
-      timestamp: Date.now(),
-      isHighlight: false,
-      probability: 0.8,
-    };
-  }
+    if (Math.random() > chance) return null;
 
-  /**
-   * Generate defensive event (tackle, intercept)
-   */
-  private generateDefensiveEvent(matchState: MatchState): MatchEvent | null {
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
-    const player = this.getRandomPlayer(team, true);
+    const shooter = this.getWeightedPlayer(team, ATTACKING_POSITIONS);
+    if (!shooter) return null;
 
-    if (!player) return null;
+    const finishing = shooter.rating / 100;
+    const conversion = GOAL_CONVERSION * (0.6 + finishing * 0.8) * (1 / Math.max(0.7, balance < 1 ? 1.2 : 1));
+    const roll = Math.random();
 
-    // 70% successful tackle, 30% unsuccessful
-    const isSuccessful = Math.random() < 0.7;
-    const eventType: EventType = isSuccessful ? 'tackle' : 'intercept';
-
-    return {
-      id: uuidv4(),
-      type: eventType,
-      minute: matchState.currentMinute,
-      team: team === matchState.homeTeam ? 'home' : 'away',
-      player,
-      description: `${player.firstName} ${player.lastName} ${isSuccessful ? 'tackles' : 'tries to intercept'} the ball`,
-      timestamp: Date.now(),
-      isHighlight: false,
-      probability: isSuccessful ? 0.7 : 0.3,
-    };
-  }
-
-  /**
-   * Generate shot event
-   */
-  private generateShotEvent(matchState: MatchState): MatchEvent | null {
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
-
-    // Forwards are more likely to shoot
-    const forwardPlayers = team.players.filter(p =>
-      ['ST', 'CAM', 'LW', 'RW'].includes(p.position) && p.onPitch
-    );
-
-    if (forwardPlayers.length === 0) return null;
-
-    const player = forwardPlayers[Math.floor(Math.random() * forwardPlayers.length)];
-    if (!player) return null;
-
-    // Determine shot result based on player rating and position
-    const shotAccuracy = player.rating / 100; // Higher rated players are more accurate
-    const random = Math.random();
-
-    let eventType: EventType;
+    let type: EventType;
     let description: string;
     let isHighlight = false;
-    let xG = 0;
+    let xG: number;
+    let assistPlayer: MatchPlayer | undefined;
 
-    if (random < shotAccuracy * 0.35) {
-      // Goal!
-      eventType = 'goal';
-      description = `🎉 GOAL! ${player.firstName} ${player.lastName} scores!`;
+    if (roll < conversion) {
+      type = 'goal';
+      assistPlayer = this.getAssistPlayer(team, shooter) ?? undefined;
+      description = assistPlayer
+        ? `GOAL! ${shooter.firstName} ${shooter.lastName} finishes off a pass from ${assistPlayer.firstName} ${assistPlayer.lastName}.`
+        : `GOAL! ${shooter.firstName} ${shooter.lastName} scores for ${team.clubName}.`;
       isHighlight = true;
-      xG = 0.8;
-    } else if (random < shotAccuracy * 0.65) {
-      // On target
-      eventType = 'shot-on-target';
-      description = `${player.firstName} ${player.lastName} shoots on target`;
-      xG = 0.3;
-    } else if (random < shotAccuracy * 0.85) {
-      // Off target
-      eventType = 'shot-off-target';
-      description = `${player.firstName} ${player.lastName}'s shot goes wide`;
-      xG = 0.05;
+      xG = 0.45;
+    } else if (roll < conversion + ON_TARGET_SHARE) {
+      type = 'shot-on-target';
+      description = `${shooter.firstName} ${shooter.lastName} forces a save.`;
+      isHighlight = true;
+      xG = 0.22;
+    } else if (roll < conversion + ON_TARGET_SHARE + BLOCKED_SHARE) {
+      type = 'shot-blocked';
+      description = `${shooter.firstName} ${shooter.lastName} sees the shot blocked.`;
+      xG = 0.08;
     } else {
-      // Blocked
-      eventType = 'shot-blocked';
-      description = `${player.firstName} ${player.lastName}'s shot is blocked`;
-      xG = 0.1;
+      type = 'shot-off-target';
+      description = `${shooter.firstName} ${shooter.lastName} drags the effort wide.`;
+      xG = 0.06;
     }
 
     return {
       id: uuidv4(),
-      type: eventType,
-      minute: matchState.currentMinute,
-      team: team === matchState.homeTeam ? 'home' : 'away',
-      player,
+      type,
+      minute,
+      team: side,
+      player: shooter,
+      assistPlayer,
       description,
       timestamp: Date.now(),
       isHighlight,
       xG,
-      probability: shotAccuracy,
+      probability: conversion,
     };
   }
 
   /**
-   * Generate foul event (leading to yellow/red card)
+   * Aggressive pressing produces more fouls, and fouls occasionally escalate
+   * into cards.
    */
-  private generateFoulEvent(matchState: MatchState): MatchEvent | null {
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
-    const player = this.getRandomPlayer(team, true);
+  private generateFoulEvent(team: TeamMatchState, side: 'home' | 'away', minute: number): MatchEvent | null {
+    const pressingFactor =
+      team.pressing === 'aggressive' ? 1.35 : team.pressing === 'conservative' ? 0.75 : 1;
 
-    if (!player) return null;
+    if (Math.random() > FOUL_CHANCE_PER_MINUTE * pressingFactor * 0.5) return null;
 
-    // Check if player already has yellow cards
-    if (player.yellowCards >= 2) {
-      return null; // Already sent off
-    }
+    const player = this.getWeightedPlayer(team, DEFENSIVE_POSITIONS);
+    if (!player || player.yellowCards >= 2) return null;
 
-    // Determine foul severity
-    const severity = Math.random();
-    let eventType: EventType;
+    const roll = Math.random();
+    let type: EventType;
     let description: string;
 
-    if (severity < 0.7) {
-      // Foul
-      eventType = 'foul';
-      description = `${player.firstName} ${player.lastName} commits a foul`;
-    } else if (severity < 0.95) {
-      // Yellow card
-      eventType = 'yellow-card';
-      description = `${player.firstName} ${player.lastName} receives a yellow card`;
+    if (roll < RED_FROM_FOUL) {
+      type = 'red-card';
+      description = `${player.firstName} ${player.lastName} is shown a straight red card.`;
+    } else if (roll < RED_FROM_FOUL + YELLOW_FROM_FOUL * this.cardMultiplier()) {
+      type = 'yellow-card';
+      description = `${player.firstName} ${player.lastName} goes into the book.`;
     } else {
-      // Red card (severe foul)
-      eventType = 'red-card';
-      description = `${player.firstName} ${player.lastName} is sent off with a red card!`;
+      type = 'foul';
+      description = `Free kick awarded against ${player.firstName} ${player.lastName}.`;
     }
 
     return {
       id: uuidv4(),
-      type: eventType,
-      minute: matchState.currentMinute,
-      team: team === matchState.homeTeam ? 'home' : 'away',
+      type,
+      minute,
+      team: side,
       player,
       description,
       timestamp: Date.now(),
-      isHighlight: eventType === 'red-card',
-      probability: eventType === 'yellow-card' ? 0.25 : eventType === 'red-card' ? 0.05 : 0.7,
+      isHighlight: type === 'red-card',
+      probability: FOUL_CHANCE_PER_MINUTE,
     };
   }
 
-  /**
-   * Generate set piece event
-   */
-  private generateSetPieceEvent(matchState: MatchState): MatchEvent | null {
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
+  private cardMultiplier(): number {
+    return Math.max(0.5, this.config.yellowCardRate / 0.02);
+  }
 
-    // Determine type
-    const setpieceType = Math.random();
-    let eventType: EventType;
-
-    if (setpieceType < 0.6) {
-      eventType = 'corner';
-    } else {
-      eventType = 'free-kick';
-    }
+  private generateCornerEvent(
+    team: TeamMatchState,
+    side: 'home' | 'away',
+    minute: number,
+    share: number
+  ): MatchEvent | null {
+    if (Math.random() > CORNER_CHANCE_PER_MINUTE * (share * 2)) return null;
 
     return {
       id: uuidv4(),
-      type: eventType,
-      minute: matchState.currentMinute,
-      team: team === matchState.homeTeam ? 'home' : 'away',
-      description: `${eventType === 'corner' ? 'Corner' : 'Free kick'} to ${team.clubName}`,
+      type: 'corner',
+      minute,
+      team: side,
+      description: `Corner kick for ${team.clubName}.`,
       timestamp: Date.now(),
       isHighlight: false,
-      probability: 0.8,
+      probability: CORNER_CHANCE_PER_MINUTE,
     };
   }
 
   /**
-   * Generate special events (injuries, etc)
+   * Injury risk is evaluated per player-minute and rises sharply as players
+   * tire, which is what makes substitutions matter.
    */
-  private generateSpecialEvent(matchState: MatchState): MatchEvent | null {
-    const eventType = Math.random();
-    const team = Math.random() < 0.5 ? matchState.homeTeam : matchState.awayTeam;
-    const player = this.getRandomPlayer(team, true);
+  private generateInjuryEvent(team: TeamMatchState, side: 'home' | 'away', minute: number): MatchEvent | null {
+    const available = team.players.filter((p) => p.onPitch && p.status === 'playing' && !p.isInjured);
+    if (available.length === 0) return null;
 
-    if (!player) return null;
+    const player = available[Math.floor(Math.random() * available.length)];
+    const fatigueRisk = 1 + (player.fatigue / 100) * 2.5;
 
-    if (eventType < 0.6) {
-      // Injury
-      return {
-        id: uuidv4(),
-        type: 'injury',
-        minute: matchState.currentMinute,
-        team: team === matchState.homeTeam ? 'home' : 'away',
-        player,
-        description: `${player.firstName} ${player.lastName} is injured`,
-        timestamp: Date.now(),
-        isHighlight: true,
-        probability: 0.15,
-      };
-    } else if (eventType < 0.8) {
-      // Possession change
-      return {
-        id: uuidv4(),
-        type: 'possession-change',
-        minute: matchState.currentMinute,
-        team: team === matchState.homeTeam ? 'home' : 'away',
-        description: `${team.clubName} gains possession`,
-        timestamp: Date.now(),
-        isHighlight: false,
-        probability: 0.5,
-      };
-    } else {
-      // Momentum shift
-      return {
-        id: uuidv4(),
-        type: 'momentum-shift',
-        minute: matchState.currentMinute,
-        team: team === matchState.homeTeam ? 'home' : 'away',
-        description: `${team.clubName} momentum increases`,
-        timestamp: Date.now(),
-        isHighlight: false,
-        probability: 0.3,
-      };
-    }
-  }
+    if (Math.random() > this.config.injuryRate * fatigueRisk * available.length) return null;
 
-  /**
-   * Generate realistic match events based on tactical situation
-   */
-  generateRealisticEvents(matchState: MatchState): MatchEvent[] {
-    const events: MatchEvent[] = [];
-
-    // Event generation weighted by match situation
-    const homeAdvantage = matchState.momentum.home > 0 ? matchState.momentum.home / 100 : 0;
-    const awayAdvantage = matchState.momentum.away > 0 ? matchState.momentum.away / 100 : 0;
-
-    // Possession based events
-    const homeHasBalll = Math.random() < (matchState.ballPossession.home / 100);
-
-    if (homeHasBalll) {
-      // Home team attacking
-      if (Math.random() < 0.3 + homeAdvantage * 0.2) {
-        const event = this.generateShotEvent(matchState);
-        if (event) events.push(event);
-      } else {
-        const event = this.generatePassEvent(matchState);
-        if (event) events.push(event);
-      }
-    } else {
-      // Away team attacking
-      if (Math.random() < 0.3 + awayAdvantage * 0.2) {
-        const event = this.generateShotEvent(matchState);
-        if (event) events.push(event);
-      } else {
-        const event = this.generatePassEvent(matchState);
-        if (event) events.push(event);
-      }
-    }
-
-    return events;
-  }
-
-  /**
-   * Calculate event probability based on team stats
-   */
-  private calculateEventProbability(team: TeamMatchState, eventType: EventType): number {
-    const baseProbs: Record<EventType, number> = {
-      'kickoff': 0.1,
-      'goal': 0.02,
-      'assist': 0.02,
-      'own-goal': 0.01,
-      'shot': 0.1,
-      'shot-on-target': 0.05,
-      'shot-off-target': 0.04,
-      'shot-blocked': 0.02,
-      'pass': 0.4,
-      'miss-pass': 0.1,
-      'intercept': 0.08,
-      'tackle': 0.15,
-      'corner': 0.05,
-      'free-kick': 0.04,
-      'throw-in': 0.03,
-      'goal-kick': 0.03,
-      'yellow-card': 0.05,
-      'red-card': 0.01,
-      'foul': 0.08,
-      'injury': 0.02,
-      'substitution': 0.01,
-      'tactical-change': 0.02,
-      'half-time': 0.01,
-      'full-time': 0.01,
-      'extra-time-start': 0.005,
-      'penalty-shootout': 0.005,
-      'possession-change': 0.15,
-      'momentum-shift': 0.08,
-      'weather-event': 0.02,
-      'crowd-moment': 0.05,
+    return {
+      id: uuidv4(),
+      type: 'injury',
+      minute,
+      team: side,
+      player,
+      description: `${player.firstName} ${player.lastName} goes down and needs treatment.`,
+      timestamp: Date.now(),
+      isHighlight: true,
+      probability: this.config.injuryRate,
     };
+  }
 
-    return baseProbs[eventType] || 0;
+  private averageRating(team: TeamMatchState, positions: string[]): number {
+    const group = team.players.filter((p) => p.onPitch && positions.includes(p.position));
+    const pool = group.length > 0 ? group : team.players.filter((p) => p.onPitch);
+    if (pool.length === 0) return 50;
+
+    return pool.reduce((sum, p) => sum + p.rating, 0) / pool.length;
   }
 
   /**
-   * Get random player from team
+   * Pick a player, favouring the given positions and the better performers
+   * within them, so key players are involved more often.
    */
-  private getRandomPlayer(team: TeamMatchState, onPitchOnly: boolean = true): MatchPlayer | null {
-    const players = onPitchOnly
-      ? team.players.filter(p => p.onPitch && p.status === 'playing')
-      : team.players;
+  private getWeightedPlayer(team: TeamMatchState, preferredPositions: string[]): MatchPlayer | null {
+    const available = team.players.filter((p) => p.onPitch && p.status === 'playing');
+    if (available.length === 0) return null;
 
-    if (players.length === 0) return null;
+    const weights = available.map((p) => {
+      const positional = preferredPositions.includes(p.position) ? 3 : 1;
+      return positional * Math.max(1, p.rating);
+    });
 
-    return players[Math.floor(Math.random() * players.length)];
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let roll = Math.random() * totalWeight;
+
+    for (let i = 0; i < available.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return available[i];
+    }
+
+    return available[available.length - 1];
   }
 
-  /**
-   * Generate assist player (if applicable)
-   */
-  private getAssistPlayer(team: TeamMatchState, excludePlayer: MatchPlayer): MatchPlayer | null {
-    const players = team.players.filter(
-      p => p.onPitch && p.status === 'playing' && p.id !== excludePlayer.id
+  private getAssistPlayer(team: TeamMatchState, scorer: MatchPlayer): MatchPlayer | null {
+    if (Math.random() < 0.25) return null;
+
+    const candidates = team.players.filter(
+      (p) => p.onPitch && p.status === 'playing' && p.id !== scorer.id
     );
+    if (candidates.length === 0) return null;
 
-    if (players.length === 0) return null;
+    const weights = candidates.map((p) => (CREATIVE_POSITIONS.includes(p.position) ? 3 : 1) * p.rating);
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let roll = Math.random() * totalWeight;
 
-    return players[Math.floor(Math.random() * players.length)];
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return candidates[i];
+    }
+
+    return candidates[candidates.length - 1];
   }
 }
 

@@ -214,19 +214,19 @@ export const PitchRenderer: React.FC<PitchRendererProps> = ({
             const y = (e.clientY - rect.top) / rect.height * 100;
 
             // Find nearest player
-            let nearest: PlayerPosition | null = null;
+            let nearestId: string | null = null;
             let minDistance = Infinity;
 
-            (playerPositions as PlayerPosition[]).forEach((pos: PlayerPosition) => {
+            playerPositions.forEach((pos) => {
               const dist = Math.hypot(pos.position.x - x, pos.position.y - y);
               if (dist < minDistance && dist < 15) {
                 minDistance = dist;
-                nearest = pos;
+                nearestId = pos.playerId;
               }
             });
 
-            if (nearest && onPlayerSelect) {
-              onPlayerSelect(nearest.playerId);
+            if (nearestId && onPlayerSelect) {
+              onPlayerSelect(nearestId);
             }
           }
         }}

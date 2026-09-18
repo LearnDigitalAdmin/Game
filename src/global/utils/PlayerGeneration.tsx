@@ -1,6 +1,5 @@
 // PlayerGenerator.tsx - Football Management Game Player Generation Module
 import { v4 as uuidv4 } from 'uuid';
-// import playersData from "../../assets/players.json";
 
 // ===== INTERFACES =====
 

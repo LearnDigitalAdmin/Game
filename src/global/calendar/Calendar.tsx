@@ -1,6 +1,7 @@
 // src/global/calendar/IntegratedCalendar.tsx
 import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { MatchService } from '../engine/MatchService';
 import { FootballManagerDB, gameDB } from '../database/Save';
 import SQLiteConnectionManager from '../database/Initializer';
 
@@ -152,17 +153,11 @@ const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
-// const formatMatchTime = (date: Date): string => {
-//   const hour = date.getHours();
-//   if (hour >= 15 && hour <= 17) return `${hour}:00`;
-//   if (hour >= 19 && hour <= 21) return `${hour}:30`;
-//   return '15:00'; // Default kick-off time
-// };
-
 // Enhanced Calendar Engine with Database Integration
 class IntegratedCalendarEngine {
   private db: SQLiteDBConnection | null = null;
   private gameDb: FootballManagerDB;
+  private matchService: MatchService | null = null;
   private connectionManager: SQLiteConnectionManager;
   private tickInterval: NodeJS.Timeout | null = null;
   private eventHandlers: Map<CalendarEventType, Set<(e: CalendarEvent) => Promise<void> | void>> = new Map();
@@ -178,11 +173,6 @@ class IntegratedCalendarEngine {
     currentSeason: '2024-25',
   };
 
-//   constructor() {
-//     this.sqlite = new SQLiteConnection(CapacitorSQLite);
-//     this.gameDb = gameDB;
-//   }
-
   get state(): CalendarState {
     return { ...this._state };
   }
@@ -190,6 +180,7 @@ class IntegratedCalendarEngine {
   constructor() {
     this.connectionManager = SQLiteConnectionManager.getInstance();
     this.gameDb = gameDB;
+    this.matchService = new MatchService(gameDB);
   }
 
   private async initCalendarDB(): Promise<void> {
@@ -220,46 +211,6 @@ class IntegratedCalendarEngine {
 
     this.eventHandlers.clear();
   }
-
-//   private async initCalendarDB(): Promise<void> {
-//     // if (this.db) return;
-
-//     try {
-//       // Use separate calendar database or shared database
-//     //   const connectionExists = await this.sqlite.isConnection("calendar", false);
-      
-//     //   if (connectionExists.result) {
-//     //     this.db = await this.sqlite.retrieveConnection("calendar", false);
-//     //   } else {
-//     //     this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
-//     //   }
-      
-//     //   await this.db.open();
-
-
-
-//       const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
-    
-//     // Check if connection exists (requires database name and readonly boolean)
-//     const connectionExists = await this.sqlite.isConnection("calendar", false);
-    
-//     if (checkConnectionsConsistency.result && connectionExists.result) {
-//       // Connection exists and is consistent, retrieve it
-//       this.db = await this.sqlite.retrieveConnection("calendar", false);
-//     } else {
-//       // No connection exists or inconsistent, create new one
-//       this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
-//     }
-    
-//     await this.db.open();
-      
-//       // Create calendar-specific tables
-//       await this.createCalendarTables();
-//     } catch (error) {
-//       console.error('Calendar database initialization failed:', error);
-//       throw error;
-//     }
-//   }
 
   private async createCalendarTables(): Promise<void> {
     if (!this.db) throw new Error('Calendar database not initialized');
@@ -684,14 +635,30 @@ class IntegratedCalendarEngine {
     }
   }
 
+  /**
+   * Resolve a fixture that has come due. The user's own match is left alone so
+   * they can play it themselves; every other match is simulated immediately so
+   * the league stays in step.
+   */
   private async processMatchEvent(event: CalendarEvent): Promise<void> {
     const payload = event.payload as MatchPayload;
-    
-    // Update fixture status to 'live'
-    await this.gameDb.updateFixture(payload.fixtureId, { status: 'live' });
-    
-    // This would trigger the match engine (not implemented here)
-    console.log(`Match started: ${payload.homeClubId} vs ${payload.awayClubId}`);
+
+    const involvesUser =
+      payload.homeClubId === this.userClubId || payload.awayClubId === this.userClubId;
+
+    if (involvesUser) {
+      await this.gameDb.updateFixture(payload.fixtureId, { status: 'live' });
+      return;
+    }
+
+    if (!this.matchService) return;
+
+    const fixtures = await this.gameDb.getFixtures(payload.divisionId);
+    const fixture = fixtures.find((f) => f.id === payload.fixtureId);
+
+    if (!fixture || fixture.status === 'finished') return;
+
+    await this.matchService.simulateFixture(fixture);
   }
 
   private async processFinancialEvent(event: CalendarEvent): Promise<void> {

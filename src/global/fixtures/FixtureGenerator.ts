@@ -29,85 +29,79 @@ export class FixtureGenerator {
       divisionId,
       clubs,
       startDate,
-      minimumRestDays = 2,
+      minimumRestDays = 3,
       preferredDays = ['Saturday', 'Wednesday'],
-      preferredTimes = { 'Saturday': ['15:00', '17:30'], 'Wednesday': ['19:45', '20:00'] }
+      preferredTimes = { Saturday: ['15:00', '17:30'], Wednesday: ['19:45', '20:00'] },
     } = options;
 
     const fixtures: Fixture[] = [];
-    const startDateObj = new Date(startDate);
-    let currentDate = new Date(startDateObj);
 
-    // Generate round-robin fixtures (home and away)
-    const matchups = this.generateRoundRobinMatchups(clubs);
-
-    let fixtureCount = 0;
-    let roundNumber = 1;
-
-    for (const matchup of matchups) {
-      // Skip weekends/midweeks based on round
-      const isFirstHalf = fixtureCount < clubs.length - 1;
-      const dayOfWeek = this.getDayOfWeek(currentDate);
-
-      // First half: weekends, Second half: weekdays
-      if (isFirstHalf && !preferredDays.includes(dayOfWeek)) {
-        currentDate = this.getNextPreferredDay(currentDate, preferredDays);
-      } else if (!isFirstHalf && dayOfWeek === 'Saturday') {
-        currentDate = this.getNextPreferredDay(currentDate, ['Wednesday', 'Tuesday', 'Monday']);
-      }
-
-      const time = this.selectFixtureTime(dayOfWeek, preferredTimes);
-
-      const fixture: Fixture = {
-        id: `fixture_${uuidv4()}`,
-        divisionId,
-        competitionType: 'league',
-        homeTeamId: matchup.home.id,
-        awayTeamId: matchup.away.id,
-        homeTeamName: matchup.home.name,
-        awayTeamName: matchup.away.name,
-        matchday: roundNumber,
-        scheduledDate: this.formatDate(currentDate),
-        scheduledTime: time,
-        kickoffTimestamp: new Date(`${this.formatDate(currentDate)}T${time}`).getTime(),
-        status: 'scheduled',
-        venue: this.getStadiumName(matchup.home.name),
-        capacity: this.estimateCapacity(matchup.home.name),
-        isLocked: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      fixtures.push(fixture);
-      fixtureCount++;
-
-      // Move to next day if we've scheduled multiple matches on same day
-      if (fixtureCount % 5 === 0) {
-        currentDate = this.getNextDate(currentDate, minimumRestDays);
-      }
-
-      // New round after all teams have played once
-      if (fixtureCount % (clubs.length / 2) === 0) {
-        roundNumber++;
-      }
+    if (clubs.length < 2) {
+      return { fixtures, schedule: this.buildSchedule(season, divisionId, clubs, minimumRestDays) };
     }
 
-    const schedule: FixtureSchedule = {
+    const rounds = this.generateRoundRobinRounds(clubs);
+    let currentDate = this.getNextPreferredDay(new Date(startDate), preferredDays);
+
+    rounds.forEach((round, roundIndex) => {
+      const dayOfWeek = this.getDayOfWeek(currentDate);
+      const time = this.selectFixtureTime(dayOfWeek, preferredTimes);
+      const matchday = roundIndex + 1;
+
+      round.forEach((matchup) => {
+        fixtures.push({
+          id: `fixture_${uuidv4()}`,
+          divisionId,
+          competitionType: 'league',
+          homeTeamId: matchup.home.id,
+          awayTeamId: matchup.away.id,
+          homeTeamName: matchup.home.name,
+          awayTeamName: matchup.away.name,
+          matchday,
+          scheduledDate: this.formatDate(currentDate),
+          scheduledTime: time,
+          kickoffTimestamp: new Date(`${this.formatDate(currentDate)}T${time}`).getTime(),
+          status: 'scheduled',
+          venue: this.getStadiumName(matchup.home.name),
+          capacity: this.estimateCapacity(matchup.home.name),
+          isLocked: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      });
+
+      // Every round gets its own date, so no club ever plays twice on a matchday.
+      currentDate = this.getNextPreferredDay(
+        this.getNextDate(currentDate, minimumRestDays),
+        preferredDays
+      );
+    });
+
+    return { fixtures, schedule: this.buildSchedule(season, divisionId, clubs, minimumRestDays) };
+  }
+
+  private static buildSchedule(
+    season: string,
+    divisionId: string,
+    clubs: Array<{ id: string; name: string }>,
+    minimumRestDays: number
+  ): FixtureSchedule {
+    const teamCount = clubs.length % 2 === 0 ? clubs.length : clubs.length + 1;
+
+    return {
       id: `schedule_${uuidv4()}`,
       season,
       divisionId,
       scheduleType: 'round_robin',
-      totalRounds: (clubs.length - 1) * 2,
+      totalRounds: Math.max(0, (teamCount - 1) * 2),
       matchesPerRound: Math.floor(clubs.length / 2),
-      generationMethod: 'standard_round_robin',
+      generationMethod: 'circle_round_robin',
       seedValue: Math.floor(Math.random() * 1000),
       homeAwayBalanced: true,
       minimumRestDays,
       generatedAt: new Date().toISOString(),
       isActive: true,
     };
-
-    return { fixtures, schedule };
   }
 
   /**
@@ -205,21 +199,51 @@ export class FixtureGenerator {
   /**
    * Generate round-robin matchups (Swiss system)
    */
-  private static generateRoundRobinMatchups(
+  /**
+   * Circle-method round robin. Each round pairs every club exactly once, and
+   * the second half of the season mirrors the first with reversed venues.
+   */
+  private static generateRoundRobinRounds(
     clubs: Array<{ id: string; name: string }>
-  ): Array<{ home: { id: string; name: string }; away: { id: string; name: string } }> {
-    const matchups: Array<{ home: any; away: any }> = [];
+  ): Array<Array<{ home: { id: string; name: string }; away: { id: string; name: string } }>> {
+    const teams: Array<{ id: string; name: string } | null> = [...clubs];
 
-    // First round-robin (home)
-    for (let i = 0; i < clubs.length; i++) {
-      for (let j = 0; j < clubs.length; j++) {
-        if (i !== j) {
-          matchups.push({ home: clubs[i], away: clubs[j] });
-        }
-      }
+    // An odd number of clubs needs a bye, represented by a null slot.
+    if (teams.length % 2 !== 0) {
+      teams.push(null);
     }
 
-    return matchups;
+    const roundCount = teams.length - 1;
+    const half = teams.length / 2;
+    const rotating = teams.slice(1);
+    const firstLeg: Array<Array<{ home: any; away: any }>> = [];
+
+    for (let round = 0; round < roundCount; round++) {
+      const pairings: Array<{ home: any; away: any }> = [];
+      const ordered = [teams[0], ...rotating];
+
+      for (let i = 0; i < half; i++) {
+        const teamA = ordered[i];
+        const teamB = ordered[ordered.length - 1 - i];
+        if (!teamA || !teamB) continue;
+
+        // Alternate venues by round so each club's home games are spread out.
+        if (round % 2 === 0) {
+          pairings.push({ home: teamA, away: teamB });
+        } else {
+          pairings.push({ home: teamB, away: teamA });
+        }
+      }
+
+      firstLeg.push(pairings);
+      rotating.unshift(rotating.pop()!);
+    }
+
+    const secondLeg = firstLeg.map((round) =>
+      round.map((matchup) => ({ home: matchup.away, away: matchup.home }))
+    );
+
+    return [...firstLeg, ...secondLeg];
   }
 
   /**

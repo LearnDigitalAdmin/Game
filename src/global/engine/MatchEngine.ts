@@ -2,25 +2,18 @@
 // Main match engine orchestrator - coordinates all simulation systems
 
 import { v4 as uuidv4 } from 'uuid';
-import {
+import type {
   MatchState,
   MatchSetup,
   TeamMatchState,
   MatchPlayer,
   MatchEvent,
-  EventType,
   Formation,
-  MatchFixture,
-  SimulationConfig,
-  MatchResultPredictor,
-  SubstitutionAction,
-  PlayerDevelopment,
-  LivePerformance,
-  TacticalChange,
-  Ball,
+  PlayerLineup,
   PlayerPosition,
-  HighlightClip,
-  MatchAnalytics,
+  Ball,
+  SimulationConfig,
+  MatchAnalytics as MatchAnalyticsData,
 } from './types/MatchTypes';
 import { MatchSimulator } from './simulation/MatchSimulator';
 import { EventGenerator } from './simulation/EventGenerator';
@@ -30,7 +23,16 @@ import { DevelopmentTracker } from './performance/DevelopmentTracker';
 import { HighlightManager } from './visualizer/HighlightManager';
 import { MatchAnalytics as AnalyticsCalculator } from './analytics/MatchAnalytics';
 import { EventRecorder } from './analytics/EventRecorder';
-import { getMatchSpeedConfig, validateMatchSpeed, type MatchSpeed } from '../fixtures/MatchEngineConfig';
+import { getMatchSpeedConfig, validateMatchSpeed, type MatchSpeed } from './MatchEngineConfig';
+
+const REGULATION_MINUTES = 90;
+const HALF_TIME_MINUTE = 45;
+
+export interface MatchResult {
+  matchState: MatchState;
+  analytics: MatchAnalyticsData;
+  finalScore: { home: number; away: number };
+}
 
 export class MatchEngine {
   private matchState: MatchState | null = null;
@@ -39,7 +41,6 @@ export class MatchEngine {
   private isRunning: boolean = false;
   private isPaused: boolean = false;
 
-  // Component systems
   private simulator: MatchSimulator;
   private eventGenerator: EventGenerator;
   private playerRater: PlayerRater;
@@ -49,19 +50,19 @@ export class MatchEngine {
   private analyticsCalculator: AnalyticsCalculator;
   private eventRecorder: EventRecorder;
 
-  // Event listeners
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
-  // Simulation loop
-  private simulationInterval: NodeJS.Timeout | null = null;
-  private lastUpdateTime: number = 0;
+  private simulationInterval: ReturnType<typeof setInterval> | null = null;
   private gameStartTime: number = 0;
+  private elapsedBeforePause: number = 0;
+  private lastProcessedMinute: number = 0;
+  private firstHalfStoppage: number = 0;
+  private secondHalfStoppage: number = 0;
 
   constructor(config: SimulationConfig = getDefaultConfig(), matchSpeed: MatchSpeed = 'default') {
     this.matchSpeed = validateMatchSpeed(matchSpeed);
     this.simulationConfig = this.buildConfigFromMatchSpeed(config);
 
-    // Initialize all subsystems
     this.simulator = new MatchSimulator(this.simulationConfig);
     this.eventGenerator = new EventGenerator(this.simulationConfig);
     this.playerRater = new PlayerRater();
@@ -72,51 +73,47 @@ export class MatchEngine {
     this.eventRecorder = new EventRecorder();
   }
 
-  /**
-   * Build simulation config from match speed specification
-   */
   private buildConfigFromMatchSpeed(baseConfig: SimulationConfig): SimulationConfig {
     const speedConfig = getMatchSpeedConfig(this.matchSpeed);
 
     return {
       ...baseConfig,
-      timeStep: 1000 / speedConfig.updateFrequencyHz, // Convert Hz to milliseconds
+      timeStep: speedConfig.visualUpdateMs,
       eventsPerMinute: baseConfig.eventsPerMinute * speedConfig.eventDensity,
     };
   }
 
-  /**
-   * Get current match speed
-   */
   getMatchSpeed(): MatchSpeed {
     return this.matchSpeed;
   }
 
-  /**
-   * Set match speed (can only be changed before match starts)
-   */
   setMatchSpeed(speed: MatchSpeed): void {
-    if (this.isRunning) {
-      console.warn('Cannot change match speed while match is running');
-      return;
-    }
-
+    if (this.isRunning) return;
     this.matchSpeed = validateMatchSpeed(speed);
     this.simulationConfig = this.buildConfigFromMatchSpeed(this.simulationConfig);
-    console.log(`✅ Match speed set to: ${this.matchSpeed}`);
   }
 
-  /**
-   * Initialize match with fixture and lineups
-   */
   async initializeMatch(setup: MatchSetup): Promise<void> {
-    console.log('🎮 Initializing match:', setup.fixture.homeTeamName, 'vs', setup.fixture.awayTeamName);
+    this.firstHalfStoppage = 1 + Math.floor(Math.random() * 3);
+    this.secondHalfStoppage = 2 + Math.floor(Math.random() * 4);
+    this.lastProcessedMinute = 0;
+    this.elapsedBeforePause = 0;
 
     this.matchState = {
       id: uuidv4(),
       fixture: setup.fixture,
-      homeTeam: this.createTeamState(setup.fixture.homeClubId, setup.fixture.homeTeamName, setup.homeLineup, setup.homeFormation),
-      awayTeam: this.createTeamState(setup.fixture.awayClubId, setup.fixture.awayTeamName, setup.awayLineup, setup.awayFormation),
+      homeTeam: this.createTeamState(
+        setup.fixture.homeClubId,
+        setup.fixture.homeTeamName,
+        setup.homeLineup,
+        setup.homeFormation
+      ),
+      awayTeam: this.createTeamState(
+        setup.fixture.awayClubId,
+        setup.fixture.awayTeamName,
+        setup.awayLineup,
+        setup.awayFormation
+      ),
       currentMinute: 0,
       currentPeriod: 'first-half',
       matchTime: 0,
@@ -125,68 +122,144 @@ export class MatchEngine {
       momentum: { home: 0, away: 0 },
       events: [],
       highlights: [],
-      weather: {
-        type: 'sunny',
-        temperature: 22,
-        windSpeed: 5,
-        impact: {
-          ballControl: 0,
-          ballSpeed: 0,
-          visibility: 100,
-          pitchCondition: 'dry',
-        },
-      },
+      weather: this.generateWeather(),
       crowd: {
-        excitement: 75,
+        excitement: 70,
         confidence: 60,
         homeSupport: 70,
         awaySupport: 30,
-        noise: 75,
+        noise: 70,
         momentumShift: 0,
       },
-      isUserMatch: true,
+      isUserMatch: Boolean(setup.userTeamId),
       userTeamId: setup.userTeamId,
     };
 
-    // Generate opening event
-    this.addEvent({
+    this.simulator.initializePositions(this.matchState);
+
+    this.processEvent({
       id: uuidv4(),
       type: 'kickoff',
       minute: 0,
       team: 'home',
-      description: `${setup.fixture.homeTeamName} kick off. Match begins!`,
+      description: `${setup.fixture.homeTeamName} kick off against ${setup.fixture.awayTeamName}.`,
       timestamp: Date.now(),
-      isHighlight: true,
+      isHighlight: false,
     });
 
-    console.log('✅ Match initialized successfully');
     this.emit('match-initialized', this.matchState);
   }
 
   /**
-   * Start match simulation
+   * Build a team's in-match state from its lineup, capping the XI at eleven
+   * players and moving any overflow to the bench.
    */
+  private createTeamState(
+    clubId: string,
+    clubName: string,
+    lineup: PlayerLineup,
+    formation: Formation
+  ): TeamMatchState {
+    const starters = lineup.players.slice(0, 11).map((p) => this.createMatchPlayer(p, true));
+    const overflow = lineup.players.slice(11);
+    const bench = [...overflow, ...lineup.substitutes].map((p) => this.createMatchPlayer(p, false));
+
+    return {
+      clubId,
+      clubName,
+      formation,
+      players: starters,
+      substitutes: bench,
+      usedSubstitutes: 0,
+      maxSubstitutes: 5,
+      possession: 50,
+      shots: 0,
+      shotsOnTarget: 0,
+      passes: 0,
+      passAccuracy: 0,
+      tackles: 0,
+      fouls: 0,
+      corners: 0,
+      freeKicks: 0,
+      redCards: 0,
+      yellowCards: 0,
+      injuryTime: 0,
+      pressing: this.pressingFromFormation(formation),
+      mentality: formation.style,
+      defensiveBlock: formation.pressing === 'high' ? 70 : formation.pressing === 'low' ? 30 : 50,
+    };
+  }
+
+  /**
+   * Normalise an incoming player into a clean per-match record so that
+   * statistics never leak between fixtures.
+   */
+  private createMatchPlayer(player: MatchPlayer, starting: boolean): MatchPlayer {
+    return {
+      ...player,
+      liveRating: 6,
+      fatigue: 0,
+      fitness: Math.max(0, Math.min(100, player.fitness ?? 100)),
+      morale: Math.max(0, Math.min(100, player.morale ?? 70)),
+      form: Math.max(0, Math.min(100, player.form ?? 50)),
+      status: starting ? 'playing' : 'substituting',
+      minutesPlayed: 0,
+      touches: 0,
+      passes: 0,
+      passAccuracy: 0,
+      tackles: 0,
+      interceptions: 0,
+      fouls: 0,
+      yellowCards: 0,
+      redCards: 0,
+      shotsOnTarget: 0,
+      shots: 0,
+      goals: 0,
+      assists: 0,
+      keyPasses: 0,
+      dribbles: 0,
+      dribbleAttempts: 0,
+      clearances: 0,
+      onPitch: starting,
+      isSubstitute: !starting,
+      isOnBench: !starting,
+      isInjured: false,
+      isSuspended: false,
+    };
+  }
+
+  private pressingFromFormation(formation: Formation): TeamMatchState['pressing'] {
+    if (formation.pressing === 'high') return 'aggressive';
+    if (formation.pressing === 'low') return 'conservative';
+    return 'normal';
+  }
+
+  private generateWeather(): MatchState['weather'] {
+    const types: MatchState['weather']['type'][] = ['sunny', 'cloudy', 'cloudy', 'rainy', 'heavy-rain', 'foggy'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const wet = type === 'rainy' || type === 'heavy-rain';
+
+    return {
+      type,
+      temperature: 8 + Math.floor(Math.random() * 20),
+      windSpeed: Math.floor(Math.random() * 25),
+      impact: {
+        ballControl: wet ? -15 : 0,
+        ballSpeed: wet ? 10 : 0,
+        visibility: type === 'foggy' ? 60 : 100,
+        pitchCondition: wet ? 'wet' : 'dry',
+      },
+    };
+  }
+
   startMatch(): void {
-    if (!this.matchState) {
-      throw new Error('Match not initialized');
-    }
+    if (!this.matchState) throw new Error('Match not initialized');
+    if (this.isRunning) return;
 
-    if (this.isRunning) {
-      console.warn('Match already running');
-      return;
-    }
-
-    console.log(`⚽ Match started (Speed: ${this.matchSpeed})`);
     this.isRunning = true;
     this.isPaused = false;
-    this.lastUpdateTime = Date.now();
     this.gameStartTime = Date.now();
 
-    const speedConfig = getMatchSpeedConfig(this.matchSpeed);
-    console.log(`📊 Match Configuration: ${speedConfig.description}`);
-    console.log(`⏱️  Update frequency: ${speedConfig.updateFrequencyHz} Hz (every ${this.simulationConfig.timeStep}ms)`);
-
-    // Run simulation loop
     this.simulationInterval = setInterval(() => {
       this.update();
     }, this.simulationConfig.timeStep);
@@ -195,76 +268,164 @@ export class MatchEngine {
   }
 
   /**
-   * Main simulation update loop
+   * Advance the clock from real elapsed time, then settle every whole game
+   * minute that has passed since the previous tick.
    */
-  private async update(): Promise<void> {
+  private update(): void {
     if (!this.matchState || !this.isRunning || this.isPaused) return;
 
-    const now = Date.now();
     const speedConfig = getMatchSpeedConfig(this.matchSpeed);
+    const elapsedRealMs = this.elapsedBeforePause + (Date.now() - this.gameStartTime);
+    const totalMinutes = this.totalMatchMinutes();
+    const minute = Math.min(totalMinutes, (elapsedRealMs / speedConfig.realTimeMs) * REGULATION_MINUTES);
 
-    // Calculate game minutes based on real elapsed time and match speed
-    const elapsedRealMs = now - this.gameStartTime;
-    // 90 real game minutes divided by the configured realTimeMs to get the multiplier
-    const gameMinutesPerRealMs = 90 / speedConfig.realTimeMs;
-    this.matchState.currentMinute = elapsedRealMs * gameMinutesPerRealMs;
+    this.matchState.currentMinute = minute;
+    this.matchState.matchTime = Math.floor(minute);
 
-    this.lastUpdateTime = now;
-
-    // Update current period
-    this.updateMatchPeriod();
-
-    // Core simulation steps
-    if (this.matchState.currentMinute < 90 || this.matchState.currentPeriod !== 'finished') {
-      // Generate probabilistic events
-      const newEvents = await this.eventGenerator.generateEvents(
-        this.matchState,
-        this.simulationConfig.eventsPerMinute
-      );
-
-      // Process each event
-      for (const event of newEvents) {
-        this.processEvent(event);
-      }
-
-      // Update player performance ratings
-      this.updatePlayerPerformance();
-
-      // Update momentum and crowd
-      this.updateMomentum();
-      this.updateCrowd();
-
-      // Check for injury events
-      await this.checkInjuryEvents();
-
-      // Broadcast state update
-      this.emit('match-update', {
-        matchState: this.matchState,
-        events: newEvents,
-      });
+    while (this.lastProcessedMinute < Math.floor(minute)) {
+      this.lastProcessedMinute += 1;
+      this.simulateMinute(this.lastProcessedMinute);
     }
 
-    // Check if match should end
-    if (this.shouldEndMatch()) {
+    this.updateMatchPeriod();
+    this.simulator.updatePlayerPositions(this.matchState);
+
+    this.emit('match-update', this.getSnapshot());
+
+    if (minute >= totalMinutes) {
       this.finishMatch();
     }
   }
 
+  private totalMatchMinutes(): number {
+    return REGULATION_MINUTES + this.firstHalfStoppage + this.secondHalfStoppage;
+  }
+
   /**
-   * Process individual match event
+   * Resolve a single game minute: events, playing time, fatigue and fitness.
    */
+  private simulateMinute(minute: number): void {
+    if (!this.matchState) return;
+
+    const events = this.eventGenerator.generateMinuteEvents(this.matchState, minute);
+    for (const event of events) {
+      this.processEvent(event);
+    }
+
+    this.accruePlayingTime();
+    this.updatePlayerPerformance();
+    this.updateMomentum();
+    this.updateCrowd();
+    this.autoSubstituteAI();
+
+    if (minute === HALF_TIME_MINUTE) {
+      this.processEvent({
+        id: uuidv4(),
+        type: 'half-time',
+        minute,
+        team: 'home',
+        description: `Half time: ${this.matchState.homeTeam.clubName} ${this.matchState.score.home} - ${this.matchState.score.away} ${this.matchState.awayTeam.clubName}`,
+        timestamp: Date.now(),
+        isHighlight: false,
+      });
+      this.recoverAtHalfTime();
+    }
+  }
+
+  /**
+   * Credit a minute of action to everyone on the pitch and wear them down
+   * at a rate driven by their own fatigue resistance and the team's pressing.
+   */
+  private accruePlayingTime(): void {
+    if (!this.matchState) return;
+
+    const applyTo = (team: TeamMatchState) => {
+      const pressingLoad = team.pressing === 'aggressive' ? 1.25 : team.pressing === 'conservative' ? 0.8 : 1;
+
+      team.players.forEach((player) => {
+        if (!player.onPitch || player.status !== 'playing') return;
+
+        player.minutesPlayed += 1;
+        const rate = (player.fatigueRate > 0 ? player.fatigueRate : 1) * pressingLoad;
+        player.fatigue = Math.min(100, player.fatigue + 0.85 * rate);
+        player.fitness = Math.max(0, 100 - player.fatigue);
+      });
+    };
+
+    applyTo(this.matchState.homeTeam);
+    applyTo(this.matchState.awayTeam);
+  }
+
+  private recoverAtHalfTime(): void {
+    if (!this.matchState) return;
+
+    const recover = (team: TeamMatchState) => {
+      team.players.forEach((player) => {
+        if (player.onPitch) {
+          player.fatigue = Math.max(0, player.fatigue - 8);
+          player.fitness = Math.max(0, 100 - player.fatigue);
+        }
+      });
+    };
+
+    recover(this.matchState.homeTeam);
+    recover(this.matchState.awayTeam);
+  }
+
+  /**
+   * Bring on fresh legs for exhausted or injured players on any side the
+   * user is not controlling.
+   */
+  private autoSubstituteAI(): void {
+    if (!this.matchState) return;
+
+    const minute = this.matchState.currentMinute;
+
+    const consider = (team: TeamMatchState, side: 'home' | 'away') => {
+      if (team.clubId === this.matchState!.userTeamId) return;
+      if (team.usedSubstitutes >= team.maxSubstitutes) return;
+
+      const replacement = team.substitutes.find((p) => !p.isInjured && p.status === 'substituting');
+      if (!replacement) return;
+
+      // Injuries force a change immediately.
+      const injured = team.players.find((p) => p.onPitch && p.status === 'injured');
+      if (injured) {
+        this.applySubstitution(team, side, injured, replacement);
+        return;
+      }
+
+      // Otherwise managers make changes in the closing half-hour, taking off
+      // whoever is most spent.
+      const windows = [62, 72, 80];
+      if (!windows.includes(Math.floor(minute))) return;
+
+      const tired = team.players
+        .filter((p) => p.onPitch && p.status === 'playing' && p.position !== 'GK')
+        .sort((a, b) => b.fatigue - a.fatigue)[0];
+
+      if (!tired || tired.fatigue < 45) return;
+
+      this.applySubstitution(team, side, tired, replacement);
+    };
+
+    consider(this.matchState.homeTeam, 'home');
+    consider(this.matchState.awayTeam, 'away');
+  }
+
   private processEvent(event: MatchEvent): void {
     if (!this.matchState) return;
 
-    console.log(`⚽ Event (${event.minute}m): ${event.description}`);
-
-    // Update match state based on event type
     switch (event.type) {
       case 'goal':
         this.handleGoal(event);
         break;
       case 'shot-on-target':
-        this.handleShotOnTarget(event);
+        this.handleShot(event, true);
+        break;
+      case 'shot-off-target':
+      case 'shot-blocked':
+        this.handleShot(event, false);
         break;
       case 'corner':
         this.handleCorner(event);
@@ -284,334 +445,230 @@ export class MatchEngine {
       case 'injury':
         this.handleInjury(event);
         break;
-      case 'substitution':
-        this.handleSubstitution(event);
-        break;
       case 'tackle':
-        this.handleTackle(event);
+      case 'intercept':
+        this.handleDefensiveAction(event);
         break;
       case 'pass':
+      case 'miss-pass':
         this.handlePass(event);
         break;
       case 'possession-change':
         this.handlePossessionChange(event);
         break;
+      default:
+        break;
     }
 
-    // Record event
     this.matchState.events.push(event);
     this.eventRecorder.recordEvent(event);
 
-    // Check if this is a highlight
     if (event.isHighlight) {
-      this.highlightManager.createHighlight(event, this.matchState);
+      const clip = this.highlightManager.createHighlight(event, this.matchState);
+      if (clip) this.matchState.highlights.push(clip);
     }
 
-    // Emit event
     this.emit('match-event', event);
   }
 
-  /**
-   * Handle goal event
-   */
+  private teamFor(event: MatchEvent): TeamMatchState {
+    return event.team === 'home' ? this.matchState!.homeTeam : this.matchState!.awayTeam;
+  }
+
   private handleGoal(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
+    const team = this.teamFor(event);
+    this.matchState.score[event.team] += 1;
+    team.shots += 1;
+    team.shotsOnTarget += 1;
 
-    // Update score
-    if (event.team === 'home') {
-      this.matchState.score.home += 1;
-    } else {
-      this.matchState.score.away += 1;
-    }
-
-    // Update player stats
-    const scorer = team.players.find(p => p.id === event.player!.id);
+    const scorer = team.players.find((p) => p.id === event.player!.id);
     if (scorer) {
       scorer.goals += 1;
-      scorer.liveRating = Math.min(10, scorer.liveRating + 0.5);
+      scorer.shots += 1;
+      scorer.shotsOnTarget += 1;
+      scorer.liveRating = Math.min(10, scorer.liveRating + 1.2);
+      scorer.morale = Math.min(100, scorer.morale + 8);
     }
 
-    // Update assist player if applicable
     if (event.assistPlayer) {
-      const assister = team.players.find(p => p.id === event.assistPlayer!.id);
+      const assister = team.players.find((p) => p.id === event.assistPlayer!.id);
       if (assister) {
         assister.assists += 1;
+        assister.keyPasses += 1;
+        assister.liveRating = Math.min(10, assister.liveRating + 0.6);
       }
     }
 
-    // Momentum shift
-    this.matchState.momentum[event.team] += 20;
-    this.matchState.momentum[event.team === 'home' ? 'away' : 'home'] -= 10;
-
-    // Crowd reaction
-    if (event.team === 'home') {
-      this.matchState.crowd.homeSupport += 10;
-      this.matchState.crowd.excitement += 20;
-    } else {
-      this.matchState.crowd.awaySupport += 10;
-      this.matchState.crowd.excitement += 20;
-    }
+    const opponent = event.team === 'home' ? 'away' : 'home';
+    this.matchState.momentum[event.team] = Math.min(100, this.matchState.momentum[event.team] + 25);
+    this.matchState.momentum[opponent] = Math.max(-100, this.matchState.momentum[opponent] - 15);
+    this.matchState.crowd.excitement = Math.min(100, this.matchState.crowd.excitement + 15);
 
     event.resultingScore = { ...this.matchState.score };
-    event.isHighlight = true;
-
     this.emit('goal', event);
   }
 
-  /**
-   * Handle shot on target event
-   */
-  private handleShotOnTarget(event: MatchEvent): void {
+  private handleShot(event: MatchEvent, onTarget: boolean): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    team.shotsOnTarget += 1;
+    const team = this.teamFor(event);
+    team.shots += 1;
+    if (onTarget) team.shotsOnTarget += 1;
 
-    const shooter = team.players.find(p => p.id === event.player!.id);
+    const shooter = team.players.find((p) => p.id === event.player!.id);
     if (shooter) {
-      shooter.shotsOnTarget += 1;
+      shooter.shots += 1;
+      if (onTarget) shooter.shotsOnTarget += 1;
     }
   }
 
-  /**
-   * Handle corner event
-   */
   private handleCorner(event: MatchEvent): void {
-    if (!this.matchState) return;
-
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    team.corners += 1;
-
-    event.isHighlight = false; // Only highlight if it results in something
+    this.teamFor(event).corners += 1;
   }
 
-  /**
-   * Handle free kick event
-   */
   private handleFreeKick(event: MatchEvent): void {
-    if (!this.matchState) return;
-
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    team.freeKicks += 1;
+    this.teamFor(event).freeKicks += 1;
   }
 
-  /**
-   * Handle yellow card event
-   */
   private handleYellowCard(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
-
-    if (player) {
-      player.yellowCards += 1;
-      player.morale -= 10;
-
-      // Second yellow = red
-      if (player.yellowCards >= 2) {
-        this.handleRedCard({
-          ...event,
-          type: 'red-card',
-          description: `${event.player.firstName} ${event.player.lastName} is sent off (second yellow)`,
-        });
-      }
-    }
-
+    const team = this.teamFor(event);
+    const player = team.players.find((p) => p.id === event.player!.id);
     team.yellowCards += 1;
+
+    if (!player) return;
+
+    player.yellowCards += 1;
+    player.morale = Math.max(0, player.morale - 8);
+    player.liveRating = Math.max(0, player.liveRating - 0.3);
+
+    if (player.yellowCards >= 2 && player.onPitch) {
+      this.handleRedCard({
+        ...event,
+        id: uuidv4(),
+        type: 'red-card',
+        description: `${player.firstName} ${player.lastName} is sent off for a second bookable offence.`,
+        isHighlight: true,
+      });
+    }
   }
 
-  /**
-   * Handle red card event
-   */
   private handleRedCard(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
+    const team = this.teamFor(event);
+    const player = team.players.find((p) => p.id === event.player!.id);
+    team.redCards += 1;
 
     if (player) {
       player.redCards += 1;
       player.onPitch = false;
       player.status = 'suspended';
-      player.morale -= 30;
+      player.isSuspended = true;
+      player.morale = Math.max(0, player.morale - 25);
+      player.liveRating = Math.max(0, player.liveRating - 1.5);
     }
 
-    team.redCards += 1;
+    const opponent = event.team === 'home' ? 'away' : 'home';
+    this.matchState.momentum[event.team] = Math.max(-100, this.matchState.momentum[event.team] - 25);
+    this.matchState.momentum[opponent] = Math.min(100, this.matchState.momentum[opponent] + 20);
 
-    // Momentum shift heavily towards other team
-    this.matchState.momentum[event.team] -= 30;
-    this.matchState.momentum[event.team === 'home' ? 'away' : 'home'] += 20;
-
-    event.isHighlight = true;
     this.emit('red-card', event);
   }
 
-  /**
-   * Handle foul event
-   */
   private handleFoul(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
-
-    if (player) {
-      player.fouls += 1;
-    }
-
+    const team = this.teamFor(event);
     team.fouls += 1;
+
+    const player = team.players.find((p) => p.id === event.player!.id);
+    if (player) player.fouls += 1;
   }
 
-  /**
-   * Handle injury event
-   */
   private handleInjury(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
+    const team = this.teamFor(event);
+    const player = team.players.find((p) => p.id === event.player!.id);
 
     if (player) {
       player.isInjured = true;
       player.status = 'injured';
-      team.injuryTime += 2; // Add injury time
+      team.injuryTime += 1;
     }
 
-    event.isHighlight = true;
     this.emit('injury', event);
   }
 
-  /**
-   * Handle substitution
-   */
-  async performSubstitution(playerOutId: string, playerInId: string, reason: string = 'tactical'): Promise<void> {
-    if (!this.matchState) return;
-
-    const userTeamId = this.matchState.userTeamId;
-    let team: TeamMatchState | null = null;
-
-    if (this.matchState.homeTeam.clubId === userTeamId) {
-      team = this.matchState.homeTeam;
-    } else if (this.matchState.awayTeam.clubId === userTeamId) {
-      team = this.matchState.awayTeam;
-    }
-
-    if (!team) {
-      console.error('Cannot find user team for substitution');
-      return;
-    }
-
-    // Find players
-    const playerOut = team.players.find(p => p.id === playerOutId);
-    const playerIn = team.substitutes.find(p => p.id === playerInId);
-
-    if (!playerOut || !playerIn) {
-      console.error('Invalid substitution players');
-      return;
-    }
-
-    // Execute substitution
-    const outIndex = team.players.indexOf(playerOut);
-    team.players[outIndex] = playerIn;
-    team.substitutes[team.substitutes.indexOf(playerIn)] = playerOut;
-
-    playerOut.status = 'substituted';
-    playerOut.onPitch = false;
-    playerIn.status = 'playing';
-    playerIn.onPitch = true;
-
-    team.usedSubstitutes += 1;
-
-    // Create event
-    const event: MatchEvent = {
-      id: uuidv4(),
-      type: 'substitution',
-      minute: this.matchState.currentMinute,
-      team: this.matchState.homeTeam.clubId === team.clubId ? 'home' : 'away',
-      player: playerIn,
-      description: `${playerOut.firstName} ${playerOut.lastName} comes off. ${playerIn.firstName} ${playerIn.lastName} comes on.`,
-      timestamp: Date.now(),
-      isHighlight: false,
-    };
-
-    this.processEvent(event);
-    this.emit('substitution', event);
-  }
-
-  /**
-   * Handle substitution event in simulation
-   */
-  private handleSubstitution(event: MatchEvent): void {
-    // Already handled in processEvent flow
-  }
-
-  /**
-   * Handle tackle event
-   */
-  private handleTackle(event: MatchEvent): void {
+  private handleDefensiveAction(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
+    const team = this.teamFor(event);
+    const player = team.players.find((p) => p.id === event.player!.id);
 
-    if (player) {
-      player.tackles += 1;
+    if (event.type === 'tackle') {
+      team.tackles += 1;
+      if (player) player.tackles += 1;
+    } else if (player) {
+      player.interceptions += 1;
     }
 
-    team.tackles += 1;
+    if (player) player.touches += 1;
   }
 
-  /**
-   * Handle pass event
-   */
   private handlePass(event: MatchEvent): void {
     if (!this.matchState || !event.player) return;
 
-    const team = event.team === 'home' ? this.matchState.homeTeam : this.matchState.awayTeam;
-    const player = team.players.find(p => p.id === event.player!.id);
+    const team = this.teamFor(event);
+    const player = team.players.find((p) => p.id === event.player!.id);
+    const completed = event.type === 'pass';
+
+    team.passes += 1;
 
     if (player) {
       player.passes += 1;
       player.touches += 1;
+      if (completed) {
+        player.passAccuracy = ((player.passAccuracy * (player.passes - 1)) + 100) / player.passes;
+      } else {
+        player.passAccuracy = (player.passAccuracy * (player.passes - 1)) / player.passes;
+      }
     }
 
-    team.passes += 1;
+    const completedTotal = team.players.reduce((sum, p) => sum + (p.passes * p.passAccuracy) / 100, 0);
+    team.passAccuracy = team.passes > 0 ? (completedTotal / team.passes) * 100 : 0;
   }
 
   /**
-   * Handle possession change
+   * Possession is tracked as a running share of contested minutes rather
+   * than a raw counter, so the two figures always total 100.
    */
   private handlePossessionChange(event: MatchEvent): void {
     if (!this.matchState) return;
 
-    // Update possession stats
-    if (event.team === 'home') {
-      this.matchState.ballPossession.home += 1;
-    } else {
-      this.matchState.ballPossession.away += 1;
-    }
+    const shift = 1.5;
+    const gaining = event.team;
+    const losing = gaining === 'home' ? 'away' : 'home';
 
-    // Normalize to ensure totals to 100
-    const total = this.matchState.ballPossession.home + this.matchState.ballPossession.away;
-    this.matchState.ballPossession.home = (this.matchState.ballPossession.home / total) * 100;
-    this.matchState.ballPossession.away = (this.matchState.ballPossession.away / total) * 100;
+    this.matchState.ballPossession[gaining] = Math.min(85, this.matchState.ballPossession[gaining] + shift);
+    this.matchState.ballPossession[losing] = 100 - this.matchState.ballPossession[gaining];
+
+    this.matchState.homeTeam.possession = this.matchState.ballPossession.home;
+    this.matchState.awayTeam.possession = this.matchState.ballPossession.away;
   }
 
-  /**
-   * Update player live performance ratings
-   */
   private updatePlayerPerformance(): void {
     if (!this.matchState) return;
 
     const updateTeam = (team: TeamMatchState) => {
-      team.players.forEach(player => {
+      team.players.forEach((player) => {
         if (player.onPitch && player.status === 'playing') {
           const performance = this.playerRater.calculateLiveRating(player);
           player.liveRating = performance.liveRating;
-          player.fatigue = Math.min(100, player.fatigue + 0.5); // Increase fatigue gradually
         }
       });
     };
@@ -620,102 +677,142 @@ export class MatchEngine {
     updateTeam(this.matchState.awayTeam);
   }
 
-  /**
-   * Update match momentum
-   */
   private updateMomentum(): void {
     if (!this.matchState) return;
 
-    // Momentum gradually returns to 0
-    this.matchState.momentum.home = this.matchState.momentum.home * 0.98;
-    this.matchState.momentum.away = this.matchState.momentum.away * 0.98;
-
-    // Clamp between -100 and 100
-    this.matchState.momentum.home = Math.max(-100, Math.min(100, this.matchState.momentum.home));
-    this.matchState.momentum.away = Math.max(-100, Math.min(100, this.matchState.momentum.away));
+    (['home', 'away'] as const).forEach((side) => {
+      const decayed = this.matchState!.momentum[side] * 0.96;
+      this.matchState!.momentum[side] = Math.max(-100, Math.min(100, decayed));
+    });
   }
 
-  /**
-   * Update crowd mood
-   */
   private updateCrowd(): void {
     if (!this.matchState) return;
 
-    // Crowd excitement decreases over time
-    this.matchState.crowd.excitement = Math.max(30, this.matchState.crowd.excitement - 0.2);
+    const crowd = this.matchState.crowd;
+    crowd.excitement = Math.max(30, crowd.excitement - 0.4);
+    crowd.noise = Math.max(30, Math.min(100, crowd.excitement));
+    crowd.momentumShift = this.matchState.momentum.home - this.matchState.momentum.away;
 
-    // Crowd affects momentum
-    if (this.matchState.crowd.homeSupport > this.matchState.crowd.awaySupport) {
-      this.matchState.momentum.home += this.matchState.crowd.excitement * 0.001;
-    } else {
-      this.matchState.momentum.away += this.matchState.crowd.excitement * 0.001;
-    }
+    this.matchState.momentum.home = Math.min(100, this.matchState.momentum.home + crowd.homeSupport * 0.002);
   }
 
-  /**
-   * Check for injury events
-   */
-  private async checkInjuryEvents(): Promise<void> {
-    if (!this.matchState) return;
-
-    // 5% chance per update of an injury in one of the teams
-    if (Math.random() < 0.05) {
-      const team = Math.random() < 0.5 ? this.matchState.homeTeam : this.matchState.awayTeam;
-      const randomPlayer = team.players[Math.floor(Math.random() * team.players.length)];
-
-      if (randomPlayer && randomPlayer.onPitch && !randomPlayer.isInjured) {
-        const event: MatchEvent = {
-          id: uuidv4(),
-          type: 'injury',
-          minute: this.matchState.currentMinute,
-          team: team === this.matchState.homeTeam ? 'home' : 'away',
-          player: randomPlayer,
-          description: `${randomPlayer.firstName} ${randomPlayer.lastName} is injured and requires treatment.`,
-          timestamp: Date.now(),
-          isHighlight: true,
-        };
-
-        this.processEvent(event);
-      }
-    }
-  }
-
-  /**
-   * Update current match period
-   */
   private updateMatchPeriod(): void {
     if (!this.matchState) return;
 
-    if (this.matchState.currentMinute < 45) {
-      this.matchState.currentPeriod = 'first-half';
-    } else if (this.matchState.currentMinute < 90) {
-      this.matchState.currentPeriod = 'second-half';
-    } else if (this.matchState.currentMinute < 120) {
-      this.matchState.currentPeriod = 'extra-time';
-    } else {
-      this.matchState.currentPeriod = 'penalty-shootout';
-    }
+    if (this.matchState.currentPeriod === 'finished') return;
 
-    this.matchState.matchTime = Math.floor(this.matchState.currentMinute);
+    this.matchState.currentPeriod =
+      this.matchState.currentMinute < HALF_TIME_MINUTE + this.firstHalfStoppage ? 'first-half' : 'second-half';
   }
 
   /**
-   * Check if match should end
+   * Replace a player on the pitch with one from the bench and log the change.
    */
-  private shouldEndMatch(): boolean {
-    if (!this.matchState) return false;
-
-    // Simple end condition: 90 minutes + injury time
-    return this.matchState.currentMinute >= 90;
-  }
-
-  /**
-   * Finish match and calculate final statistics
-   */
-  private finishMatch(): void {
+  private applySubstitution(
+    team: TeamMatchState,
+    side: 'home' | 'away',
+    playerOut: MatchPlayer,
+    playerIn: MatchPlayer
+  ): void {
     if (!this.matchState) return;
 
-    console.log('🏁 Match Finished');
+    const outIndex = team.players.indexOf(playerOut);
+    const inIndex = team.substitutes.indexOf(playerIn);
+    if (outIndex === -1 || inIndex === -1) return;
+
+    team.players[outIndex] = playerIn;
+    team.substitutes[inIndex] = playerOut;
+
+    playerOut.status = playerOut.status === 'injured' ? 'injured' : 'substituted';
+    playerOut.onPitch = false;
+    playerOut.isOnBench = true;
+
+    playerIn.status = 'playing';
+    playerIn.onPitch = true;
+    playerIn.isOnBench = false;
+    playerIn.isSubstitute = false;
+
+    team.usedSubstitutes += 1;
+
+    this.processEvent({
+      id: uuidv4(),
+      type: 'substitution',
+      minute: Math.floor(this.matchState.currentMinute),
+      team: side,
+      player: playerIn,
+      description: `${team.clubName}: ${playerIn.firstName} ${playerIn.lastName} replaces ${playerOut.firstName} ${playerOut.lastName}.`,
+      timestamp: Date.now(),
+      isHighlight: false,
+    });
+
+    this.emit('substitution', { playerOut, playerIn, team: side });
+  }
+
+  /**
+   * User-driven substitution. Returns false when the change is not legal so
+   * the interface can explain why nothing happened.
+   */
+  performSubstitution(playerOutId: string, playerInId: string): boolean {
+    if (!this.matchState) return false;
+
+    const userTeamId = this.matchState.userTeamId;
+    const team =
+      this.matchState.homeTeam.clubId === userTeamId
+        ? this.matchState.homeTeam
+        : this.matchState.awayTeam.clubId === userTeamId
+        ? this.matchState.awayTeam
+        : null;
+
+    if (!team) return false;
+    if (team.usedSubstitutes >= team.maxSubstitutes) return false;
+
+    const playerOut = team.players.find((p) => p.id === playerOutId && p.onPitch);
+    const playerIn = team.substitutes.find((p) => p.id === playerInId && !p.isInjured && p.status === 'substituting');
+    if (!playerOut || !playerIn) return false;
+
+    const side = team.clubId === this.matchState.homeTeam.clubId ? 'home' : 'away';
+    this.applySubstitution(team, side, playerOut, playerIn);
+    return true;
+  }
+
+  /**
+   * Change the user team's shape mid-match; the new formation feeds straight
+   * back into pressing, block height and event generation.
+   */
+  changeFormation(formation: Formation): boolean {
+    if (!this.matchState) return false;
+
+    const userTeamId = this.matchState.userTeamId;
+    const team =
+      this.matchState.homeTeam.clubId === userTeamId
+        ? this.matchState.homeTeam
+        : this.matchState.awayTeam.clubId === userTeamId
+        ? this.matchState.awayTeam
+        : null;
+
+    if (!team) return false;
+
+    team.formation = formation;
+    team.mentality = formation.style;
+    team.pressing = this.pressingFromFormation(formation);
+    team.defensiveBlock = formation.pressing === 'high' ? 70 : formation.pressing === 'low' ? 30 : 50;
+
+    this.processEvent({
+      id: uuidv4(),
+      type: 'tactical-change',
+      minute: Math.floor(this.matchState.currentMinute),
+      team: team.clubId === this.matchState.homeTeam.clubId ? 'home' : 'away',
+      description: `${team.clubName} switch to ${formation.name} (${formation.style}).`,
+      timestamp: Date.now(),
+      isHighlight: false,
+    });
+
+    return true;
+  }
+
+  private finishMatch(): void {
+    if (!this.matchState || this.matchState.currentPeriod === 'finished') return;
 
     this.isRunning = false;
     this.isPaused = false;
@@ -725,117 +822,149 @@ export class MatchEngine {
       this.simulationInterval = null;
     }
 
+    const totalMinutes = this.totalMatchMinutes();
+    this.matchState.currentMinute = totalMinutes;
+    this.matchState.matchTime = Math.floor(totalMinutes);
+
+    this.processEvent({
+      id: uuidv4(),
+      type: 'full-time',
+      minute: Math.floor(totalMinutes),
+      team: 'home',
+      description: `Full time: ${this.matchState.homeTeam.clubName} ${this.matchState.score.home} - ${this.matchState.score.away} ${this.matchState.awayTeam.clubName}`,
+      timestamp: Date.now(),
+      isHighlight: true,
+    });
+
     this.matchState.currentPeriod = 'finished';
+    this.matchState.fixture.status = 'finished';
+    this.matchState.fixture.attendance = this.estimateAttendance();
 
-    // Calculate final statistics
+    this.applyPostMatchDevelopment();
+
     const analytics = this.analyticsCalculator.generateMatchAnalytics(this.matchState);
-
-    // Update player statistics in database
-    this.updatePlayerStatisticsInDatabase();
-
-    // Update player form and development
-    this.updatePlayerFormAndDevelopment();
-
-    this.emit('match-finished', {
+    const result: MatchResult = {
       matchState: this.matchState,
       analytics,
-      finalScore: this.matchState.score,
-    });
+      finalScore: { ...this.matchState.score },
+    };
+
+    this.emit('match-finished', result);
+  }
+
+  private estimateAttendance(): number {
+    if (!this.matchState) return 0;
+    const base = 8000 + Math.floor(this.matchState.crowd.homeSupport * 180);
+    return base + Math.floor(Math.random() * 4000);
   }
 
   /**
-   * Update player statistics in database
+   * Convert the match into lasting change: form, morale and rating movement
+   * for everyone who featured.
    */
-  private updatePlayerStatisticsInDatabase(): void {
+  private applyPostMatchDevelopment(): void {
     if (!this.matchState) return;
 
-    // This would integrate with the game database
-    // TODO: Implement database update
-  }
+    const won = (side: 'home' | 'away') =>
+      side === 'home'
+        ? this.matchState!.score.home > this.matchState!.score.away
+        : this.matchState!.score.away > this.matchState!.score.home;
 
-  /**
-   * Update player form and development after match
-   */
-  private updatePlayerFormAndDevelopment(): void {
-    if (!this.matchState) return;
+    const updateTeam = (team: TeamMatchState, side: 'home' | 'away') => {
+      const allPlayers = [...team.players, ...team.substitutes];
 
-    const updateTeam = (team: TeamMatchState) => {
-      team.players.forEach(player => {
-        // Update form based on rating
-        const formChange = (player.liveRating - 5) * 2; // -10 to +10
-        player.form = Math.max(0, Math.min(100, player.form + formChange));
+      allPlayers.forEach((player) => {
+        if (player.minutesPlayed <= 0) return;
 
-        // Update experience based on minutes played
-        const experienceGain = player.minutesPlayed * 0.5;
+        const impact = this.formCalculator.calculateMatchImpact(player, player.liveRating);
+        player.form = Math.max(0, Math.min(100, player.form + impact.formChange));
 
-        // Development progression
-        const development = this.developmentTracker.calculateDevelopment(player, experienceGain);
-        if (development.ratingChange > 0) {
-          // Rating can improve based on performance
-          console.log(`${player.firstName} ${player.lastName} gained ${development.ratingChange} rating points`);
-        }
+        const moraleSwing = won(side) ? 5 : this.matchState!.score.home === this.matchState!.score.away ? 1 : -4;
+        player.morale = Math.max(0, Math.min(100, player.morale + moraleSwing));
+
+        const development = this.developmentTracker.calculateDevelopment(
+          player,
+          player.liveRating,
+          player.minutesPlayed
+        );
+
+        player.rating = Math.max(1, Math.min(player.potential, player.rating + development.ratingChange));
       });
     };
 
-    updateTeam(this.matchState.homeTeam);
-    updateTeam(this.matchState.awayTeam);
+    updateTeam(this.matchState.homeTeam, 'home');
+    updateTeam(this.matchState.awayTeam, 'away');
   }
 
   /**
-   * Pause the match
+   * Run a whole match immediately with no timers. Used for every fixture the
+   * user is not watching so the rest of the league keeps pace.
    */
+  simulateToCompletion(): MatchResult | null {
+    if (!this.matchState) return null;
+
+    const totalMinutes = this.totalMatchMinutes();
+
+    for (let minute = this.lastProcessedMinute + 1; minute <= totalMinutes; minute++) {
+      this.lastProcessedMinute = minute;
+      this.matchState.currentMinute = minute;
+      this.simulateMinute(minute);
+      this.updateMatchPeriod();
+    }
+
+    let result: MatchResult | null = null;
+    const capture = (r: MatchResult) => {
+      result = r;
+    };
+
+    this.on('match-finished', capture);
+    this.finishMatch();
+    this.off('match-finished', capture);
+
+    return result;
+  }
+
   pause(): void {
+    if (!this.isRunning || this.isPaused) return;
     this.isPaused = true;
-    this.emit('match-paused', this.matchState);
+    this.elapsedBeforePause += Date.now() - this.gameStartTime;
+    this.emit('match-paused', this.getSnapshot());
   }
 
-  /**
-   * Resume the match
-   */
   resume(): void {
+    if (!this.isRunning || !this.isPaused) return;
     this.isPaused = false;
-    this.emit('match-resumed', this.matchState);
+    this.gameStartTime = Date.now();
+    this.emit('match-resumed', this.getSnapshot());
   }
 
   /**
-   * Add event to match
+   * A shallow copy of live state. The engine mutates its own objects in
+   * place, so consumers need a fresh reference to detect changes.
    */
-  private addEvent(event: Omit<MatchEvent, 'id'> & { id?: string }): void {
-    if (!this.matchState) return;
+  getSnapshot(): { matchState: MatchState; playerPositions: PlayerPosition[]; ball: Ball } | null {
+    if (!this.matchState) return null;
 
-    const fullEvent: MatchEvent = {
-      ...event,
-      id: event.id || uuidv4(),
-    } as MatchEvent;
-
-    this.matchState.events.push(fullEvent);
+    return {
+      matchState: { ...this.matchState },
+      playerPositions: this.simulator.getAllPlayerPositions(),
+      ball: this.simulator.getBallState(),
+    };
   }
 
-  /**
-   * Get current match state
-   */
   getMatchState(): MatchState | null {
     return this.matchState;
   }
 
-  /**
-   * Get match speed configuration info
-   */
-  getMatchSpeedInfo(): ReturnType<typeof getMatchSpeedConfig> {
-    return getMatchSpeedConfig(this.matchSpeed);
-  }
-
-  /**
-   * Get match progress as percentage
-   */
   getMatchProgress(): number {
     if (!this.matchState) return 0;
-    return Math.min(100, (this.matchState.currentMinute / 90) * 100);
+    return Math.min(100, (this.matchState.currentMinute / this.totalMatchMinutes()) * 100);
   }
 
-  /**
-   * Register event listener
-   */
+  getRunningState(): { isRunning: boolean; isPaused: boolean } {
+    return { isRunning: this.isRunning, isPaused: this.isPaused };
+  }
+
   on(event: string, callback: (data: any) => void): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
@@ -843,52 +972,38 @@ export class MatchEngine {
     this.listeners.get(event)!.add(callback);
   }
 
-  /**
-   * Unregister event listener
-   */
   off(event: string, callback: (data: any) => void): void {
-    const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.delete(callback);
-    }
+    this.listeners.get(event)?.delete(callback);
   }
 
-  /**
-   * Emit event to listeners
-   */
   private emit(event: string, data: any): void {
-    const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error(`Error in event listener for ${event}:`, error);
-        }
-      });
-    }
+    this.listeners.get(event)?.forEach((callback) => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`Match engine listener failed for "${event}":`, error);
+      }
+    });
   }
 
-  /**
-   * Cleanup and destroy engine
-   */
   destroy(): void {
     if (this.simulationInterval) {
       clearInterval(this.simulationInterval);
+      this.simulationInterval = null;
     }
+    this.isRunning = false;
     this.listeners.clear();
     this.matchState = null;
   }
 }
 
-// Default simulation configuration
 function getDefaultConfig(): SimulationConfig {
   return {
-    timeStep: 16, // ~60 FPS
-    eventsPerMinute: 5,
+    timeStep: 1000,
+    eventsPerMinute: 10,
     realism: 'realistic',
-    injuryRate: 0.15,
-    yellowCardRate: 0.25,
+    injuryRate: 0.00012,
+    yellowCardRate: 0.02,
     randomness: 50,
   };
 }

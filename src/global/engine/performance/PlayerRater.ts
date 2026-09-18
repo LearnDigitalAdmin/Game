@@ -1,83 +1,56 @@
 // src/global/engine/performance/PlayerRater.ts
 // Live player rating calculation during matches
 
-import { MatchPlayer, LivePerformance } from '../types/MatchTypes';
+import type { MatchPlayer, LivePerformance } from '../types/MatchTypes';
 
 export class PlayerRater {
   /**
    * Calculate live rating for a player (0-10 scale)
    */
   calculateLiveRating(player: MatchPlayer): LivePerformance {
-    const baseRating = player.rating / 100 * 10; // Convert 0-100 to 0-10
+    const baseRating = 6 + ((player.rating - 60) / 40) * 1.2;
 
-    // Calculate rating factors
     const ratingFactors = {
-      form: (player.form / 100) * 2 - 1, // -1 to +1
-      fatigue: -(player.fatigue / 100) * 2, // -2 to 0
-      morale: (player.morale / 100) * 1, // 0 to +1
-      matchFitness: (player.fitness / 100) * 1, // 0 to +1
-      weather: 0.5, // Normally 0.5, could vary
-      opposition: 0, // Could be affected by opposing player
+      form: (player.form / 100) * 0.6 - 0.3,
+      fatigue: -(player.fatigue / 100) * 0.7,
+      morale: (player.morale / 100) * 0.4 - 0.2,
+      matchFitness: (player.fitness / 100) * 0.3 - 0.15,
+      weather: 0,
+      opposition: 0,
     };
 
-    // Apply factors to base rating
-    const factorAdjustment = Object.values(ratingFactors).reduce((a, b) => a + b, 0);
-    const liveRating = Math.max(0, Math.min(10, baseRating + factorAdjustment));
+    const conditionAdjustment = Object.values(ratingFactors).reduce((a, b) => a + b, 0);
+    const contribution = this.calculateContribution(player);
+    const liveRating = Math.max(1, Math.min(10, baseRating + conditionAdjustment + contribution));
 
-    // Calculate performance metrics
-    const expectedTouches = player.position === 'GK' ? 20 : player.position === 'CB' ? 60 : 80;
+    const expectedTouches = player.position === 'GK' ? 25 : player.position === 'CB' ? 60 : 75;
     const expectedPasses = this.getExpectedPasses(player.position);
-    const passCompletionRate = player.touches > 0
-      ? (player.passes / player.touches) * 100
-      : 0;
+    const passCompletionRate = player.passAccuracy;
 
-    // Duel win rate (tackles + interceptions + successful duels)
     const totalDuels = player.tackles + player.interceptions;
     const duelWinRate = totalDuels > 0 ? (player.tackles / totalDuels) * 100 : 0;
+    const shotAccuracy = player.shots > 0 ? (player.shotsOnTarget / player.shots) * 100 : 0;
 
-    // Shot accuracy
-    const shotAccuracy = player.shotsOnTarget > 0
-      ? (player.goals / player.shotsOnTarget) * 100
-      : 0;
+    const aerialDuelWinRate =
+      player.position === 'CB' || player.position === 'ST'
+        ? Math.min(100, (liveRating / 10) * 60)
+        : 20;
 
-    // Aerial duel win rate (estimated)
-    const aerialDuelWinRate = player.position === 'CB' || player.position === 'ST'
-      ? Math.min(100, (liveRating / 10) * 60)
-      : 20;
-
-    // Key events during match
     const keyEvents: string[] = [];
-    if (player.goals > 0) {
-      keyEvents.push(`Scored ${player.goals} goal${player.goals > 1 ? 's' : ''}`);
-    }
-    if (player.assists > 0) {
-      keyEvents.push(`Assisted ${player.assists} goal${player.assists > 1 ? 's' : ''}`);
-    }
-    if (player.yellowCards > 0) {
-      keyEvents.push(`Yellow card`);
-    }
-    if (player.redCards > 0) {
-      keyEvents.push(`Red card`);
-    }
+    if (player.goals > 0) keyEvents.push(`Scored ${player.goals} goal${player.goals > 1 ? 's' : ''}`);
+    if (player.assists > 0) keyEvents.push(`Assisted ${player.assists} goal${player.assists > 1 ? 's' : ''}`);
+    if (player.yellowCards > 0) keyEvents.push('Booked');
+    if (player.redCards > 0) keyEvents.push('Sent off');
 
-    // Positional impact
-    const positionalImpact = this.calculatePositionalImpact(player, liveRating);
-
-    // Experience gained
+    const positionalImpact = this.calculatePositionalImpact(player);
     const experienceGained = this.calculateExperience(player, liveRating);
-
-    // Development points
     const developmentPoints = this.calculateDevelopmentPoints(player, liveRating);
-
-    // Rating change and form change (to be applied after match)
-    const ratingChange = liveRating > 6 ? 0.2 : liveRating < 4 ? -0.2 : 0;
-    const formChange = (liveRating - 5) * 2; // -10 to +10
 
     return {
       playerId: player.id,
-      minuteStarted: 0, // Would be set during match
+      minuteStarted: 0,
 
-      baseRating: baseRating,
+      baseRating,
       liveRating,
       ratingFactors,
 
@@ -90,8 +63,8 @@ export class PlayerRater {
 
       experienceGained,
       developmentPoints,
-      ratingChange,
-      formChange,
+      ratingChange: liveRating > 7 ? 0.2 : liveRating < 4.5 ? -0.2 : 0,
+      formChange: (liveRating - 6) * 2,
 
       keyEvents,
       positionalImpact,
@@ -99,8 +72,32 @@ export class PlayerRater {
   }
 
   /**
-   * Get expected passes for a player based on position
+   * Reward what the player has produced in this match. Attacking returns are
+   * weighted most heavily, with discipline counting against them.
    */
+  private calculateContribution(player: MatchPlayer): number {
+    let contribution = 0;
+
+    contribution += player.goals * 1.1;
+    contribution += player.assists * 0.7;
+    contribution += player.shotsOnTarget * 0.12;
+    contribution += player.keyPasses * 0.1;
+    contribution += player.tackles * 0.06;
+    contribution += player.interceptions * 0.05;
+    contribution += player.clearances * 0.03;
+
+    // Passing is judged against volume so a few stray balls are not punished.
+    if (player.passes > 10) {
+      contribution += ((player.passAccuracy - 78) / 100) * 0.8;
+    }
+
+    contribution -= player.fouls * 0.05;
+    contribution -= player.yellowCards * 0.3;
+    contribution -= player.redCards * 1.5;
+
+    return Math.max(-3, Math.min(4, contribution));
+  }
+
   private getExpectedPasses(position: string): number {
     const expectations: Record<string, number> = {
       'GK': 20,
@@ -121,7 +118,7 @@ export class PlayerRater {
   /**
    * Calculate positional impact (how well they played their position)
    */
-  private calculatePositionalImpact(player: MatchPlayer, liveRating: number): number {
+  private calculatePositionalImpact(player: MatchPlayer): number {
     let impact = 0;
 
     // Position-specific metrics
@@ -193,129 +190,6 @@ export class PlayerRater {
     const developmentPoints = ageFactor * performanceFactor * minutesFactor * 100;
 
     return Math.max(0, developmentPoints);
-  }
-
-  /**
-   * Calculate pre-match influence factors for all players
-   */
-  calculatePreMatchInfluence(players: MatchPlayer[], opposition: string): void {
-    players.forEach(player => {
-      // Opposition quality could affect performance
-      // Home advantage could be applied
-      // Recent form already captured in player.form
-    });
-  }
-
-  /**
-   * Rate goalkeeper performance
-   */
-  rateGoalkeeperPerformance(
-    saves: number,
-    shotsOnTarget: number,
-    mistakes: number,
-    cleanSheet: boolean
-  ): number {
-    let rating = 5; // Base 5/10
-
-    // Saves impact
-    const saveRatio = shotsOnTarget > 0 ? saves / shotsOnTarget : 0;
-    rating += saveRatio * 3;
-
-    // Clean sheet bonus
-    if (cleanSheet) {
-      rating += 1;
-    }
-
-    // Mistakes penalty
-    rating -= mistakes * 0.5;
-
-    return Math.max(0, Math.min(10, rating));
-  }
-
-  /**
-   * Rate defender performance
-   */
-  rateDefenderPerformance(
-    tackles: number,
-    interceptions: number,
-    clearances: number,
-    errors: number,
-    passes: number,
-    passAccuracy: number
-  ): number {
-    let rating = 5;
-
-    // Defensive actions
-    rating += (tackles * 0.1 + interceptions * 0.15 + clearances * 0.05);
-
-    // Pass accuracy
-    rating += (passAccuracy / 100) * 2;
-
-    // Errors
-    rating -= errors * 0.5;
-
-    return Math.max(0, Math.min(10, rating));
-  }
-
-  /**
-   * Rate midfielder performance
-   */
-  rateMiddlefieldPerformance(
-    passes: number,
-    passAccuracy: number,
-    keyPasses: number,
-    tackles: number,
-    goals: number,
-    assists: number
-  ): number {
-    let rating = 5;
-
-    // Passing
-    rating += (passes / 50) * 0.5 + (passAccuracy / 100) * 2;
-
-    // Key passes
-    rating += keyPasses * 0.2;
-
-    // Defensive contributions
-    rating += tackles * 0.05;
-
-    // Attacking contributions
-    rating += (goals * 0.5 + assists * 0.3);
-
-    return Math.max(0, Math.min(10, rating));
-  }
-
-  /**
-   * Rate attacker performance
-   */
-  rateAttackerPerformance(
-    goals: number,
-    assists: number,
-    shots: number,
-    shotsOnTarget: number,
-    dribbles: number,
-    dribbleAttempts: number,
-    passAccuracy: number
-  ): number {
-    let rating = 5;
-
-    // Goals and assists
-    rating += goals * 1 + assists * 0.5;
-
-    // Shot accuracy
-    if (shots > 0) {
-      rating += (shotsOnTarget / shots) * 2;
-    }
-
-    // Dribbles
-    if (dribbleAttempts > 0) {
-      rating += (dribbles / dribbleAttempts) * 1;
-    }
-
-    // Positioning/movement
-    rating += (passAccuracy / 100) * 0.5;
-
-    return Math.max(0, Math.min(10, rating));
   }
 
   /**

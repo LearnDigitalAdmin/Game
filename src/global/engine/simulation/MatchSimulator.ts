@@ -1,11 +1,9 @@
 // src/global/engine/simulation/MatchSimulator.ts
 // Core match simulation and physics engine
 
-import { v4 as uuidv4 } from 'uuid';
-import {
+import type {
   MatchState,
   TeamMatchState,
-  MatchPlayer,
   Ball,
   PlayerPosition,
   Vector2D,
@@ -14,8 +12,10 @@ import {
 } from '../types/MatchTypes';
 
 export class MatchSimulator {
-  private config: SimulationConfig;
+  private readonly config: SimulationConfig;
   private ball: Ball;
+  private homeFormationAnchors: Map<string, Vector2D> = new Map();
+  private ball_target: Vector2D = { x: 50, y: 50 };
   private playerPositions: Map<string, PlayerPosition> = new Map();
 
   constructor(config: SimulationConfig) {
@@ -33,11 +33,11 @@ export class MatchSimulator {
    * Initialize player positions based on formation
    */
   initializePositions(matchState: MatchState): void {
-    // Set up formations
+    this.playerPositions.clear();
+    this.homeFormationAnchors.clear();
     this.setupFormation(matchState.homeTeam, 'home');
     this.setupFormation(matchState.awayTeam, 'away');
-
-    console.log('✅ Player positions initialized');
+    this.resetBall();
   }
 
   /**
@@ -48,7 +48,6 @@ export class MatchSimulator {
     const [defenders, midfielders, forwards] = formation.shape;
 
     let positionIndex = 0;
-    const baseX = side === 'home' ? 20 : 80;
 
     // Goalkeeper
     const gk = team.players[positionIndex++];
@@ -94,6 +93,7 @@ export class MatchSimulator {
    * Set player position
    */
   private setPlayerPosition(playerId: string, position: Vector2D, velocity: Vector2D = { x: 0, y: 0 }): void {
+    this.homeFormationAnchors.set(playerId, { ...position });
     this.playerPositions.set(playerId, {
       playerId,
       position: { ...position },
@@ -119,33 +119,63 @@ export class MatchSimulator {
   }
 
   /**
-   * Update player positions based on match state
+   * Drift every player between their formation anchor and the ball, so the
+   * shape stays recognisable while the play visibly shifts up and down the
+   * pitch.
    */
   updatePlayerPositions(matchState: MatchState): void {
-    // Move players based on ball possession and formation
-    const ballPos = this.ball.position;
+    this.advanceBallTarget(matchState);
 
-    if (this.ball.possession) {
-      // Move teammates toward ball, opponents away from ball
-      this.updateDefensivePositions(matchState);
-      this.updateOffensivePositions(matchState);
-    }
+    this.driftTeam(matchState.homeTeam, 'home');
+    this.driftTeam(matchState.awayTeam, 'away');
+
+    this.ball.position.x += (this.ball_target.x - this.ball.position.x) * 0.25;
+    this.ball.position.y += (this.ball_target.y - this.ball.position.y) * 0.25;
   }
 
   /**
-   * Update defensive positions
+   * Move the notional centre of play toward whichever side currently holds
+   * the advantage in possession and momentum.
    */
-  private updateDefensivePositions(matchState: MatchState): void {
-    // Calculate pressure on ball
-    // Players move to press or defend based on formation
+  private advanceBallTarget(matchState: MatchState): void {
+    const homePush = (matchState.ballPossession.home - 50) / 50 + matchState.momentum.home / 200;
+    const targetX = 50 + homePush * 25;
+
+    this.ball_target = {
+      x: Math.max(8, Math.min(92, targetX + (Math.random() - 0.5) * 18)),
+      y: Math.max(8, Math.min(92, 50 + (Math.random() - 0.5) * (this.config.randomness / 2))),
+    };
   }
 
-  /**
-   * Update offensive positions
-   */
-  private updateOffensivePositions(matchState: MatchState): void {
-    // Calculate attacking movement
-    // Players move to create space, support ball carrier
+  private driftTeam(team: TeamMatchState, side: 'home' | 'away'): void {
+    const blockShift = ((team.defensiveBlock - 50) / 50) * 8 * (side === 'home' ? 1 : -1);
+
+    team.players.forEach((player) => {
+      const pos = this.playerPositions.get(player.id);
+      const anchor = this.homeFormationAnchors.get(player.id);
+      if (!pos || !anchor) return;
+
+      if (!player.onPitch) {
+        pos.velocity = { x: 0, y: 0 };
+        pos.speed = 0;
+        return;
+      }
+
+      // Goalkeepers hold their line rather than chasing play.
+      const pull = player.position === 'GK' ? 0.04 : 0.22;
+      const targetX = anchor.x + blockShift + (this.ball_target.x - anchor.x) * pull;
+      const targetY = anchor.y + (this.ball_target.y - anchor.y) * pull;
+
+      const dx = targetX - pos.position.x;
+      const dy = targetY - pos.position.y;
+
+      pos.position.x = Math.max(0, Math.min(100, pos.position.x + dx * 0.3));
+      pos.position.y = Math.max(0, Math.min(100, pos.position.y + dy * 0.3));
+      pos.velocity = { x: dx, y: dy };
+      pos.speed = Math.min(100, Math.hypot(dx, dy) * 10);
+      pos.direction = (Math.atan2(dy, dx) * 180) / Math.PI;
+      pos.rotation = pos.direction;
+    });
   }
 
   /**

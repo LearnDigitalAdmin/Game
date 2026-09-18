@@ -3,6 +3,7 @@
 
 import type {
   MatchState,
+  TeamMatchState,
   MatchAnalytics as MatchAnalyticsType,
   TeamMatchStats,
   ShotMap,
@@ -26,8 +27,8 @@ export class MatchAnalytics {
         away: matchState.score.away,
       },
 
-      homeStats: this.generateTeamStats(matchState.homeTeam, 'home'),
-      awayStats: this.generateTeamStats(matchState.awayTeam, 'away'),
+      homeStats: this.generateTeamStats(matchState, 'home'),
+      awayStats: this.generateTeamStats(matchState, 'away'),
 
       expectedGoals: this.calculateExpectedGoals(matchState),
       possession: {
@@ -57,27 +58,33 @@ export class MatchAnalytics {
   /**
    * Generate team statistics
    */
-  private generateTeamStats(team: any, side: 'home' | 'away'): TeamMatchStats {
+  private generateTeamStats(matchState: MatchState, side: 'home' | 'away'): TeamMatchStats {
+    const team = side === 'home' ? matchState.homeTeam : matchState.awayTeam;
+    const goals = side === 'home' ? matchState.score.home : matchState.score.away;
+    const conceded = side === 'home' ? matchState.score.away : matchState.score.home;
+    const keeper = team.players.find((p) => p.position === 'GK');
+    const opponent = side === 'home' ? matchState.awayTeam : matchState.homeTeam;
+
     return {
       clubName: team.clubName,
       teamColor: side === 'home' ? '#3b82f6' : '#ef4444',
 
-      goals: side === 'home' ? team.score : 0, // This would come from matchState
+      goals,
       shotsOnTarget: team.shotsOnTarget,
-      shots: team.shotsOnTarget + Math.floor(team.shotsOnTarget * 0.4),
+      shots: team.shots,
       expectedGoals: this.calculateTeamExpectedGoals(team),
-      bigChances: Math.floor(team.shotsOnTarget * 0.3),
-      bigChancesMissed: Math.floor(team.shotsOnTarget * 0.1),
+      bigChances: Math.round(team.shotsOnTarget * 0.4),
+      bigChancesMissed: Math.max(0, Math.round(team.shotsOnTarget * 0.4) - goals),
 
-      possession: side === 'home' ? 50 : 50, // From matchState
+      possession: side === 'home' ? matchState.ballPossession.home : matchState.ballPossession.away,
       passes: team.passes,
-      passAccuracy: this.calculatePassAccuracy(team),
-      keyPasses: Math.floor(team.passes * 0.05),
+      passAccuracy: team.passAccuracy,
+      keyPasses: team.players.reduce((sum, p) => sum + p.keyPasses, 0),
 
       tackles: team.tackles,
-      interceptions: Math.floor(team.tackles * 0.3),
-      clearances: Math.floor(team.tackles * 0.5),
-      saves: team.position === 'GK' ? Math.floor(Math.random() * 8) : 0,
+      interceptions: team.players.reduce((sum, p) => sum + p.interceptions, 0),
+      clearances: team.players.reduce((sum, p) => sum + p.clearances, 0),
+      saves: keeper ? Math.max(0, opponent.shotsOnTarget - conceded) : 0,
 
       fouls: team.fouls,
       yellowCards: team.yellowCards,
@@ -86,33 +93,21 @@ export class MatchAnalytics {
       corners: team.corners,
       freeKicks: team.freeKicks,
 
-      offsides: Math.floor(team.passes * 0.01),
-      injuryTime: team.injuryTime || 0,
+      offsides: Math.round(team.passes * 0.004),
+      injuryTime: team.injuryTime,
     };
   }
 
   /**
    * Calculate team expected goals
    */
-  private calculateTeamExpectedGoals(team: any): number {
-    // xG calculation based on shots and quality
-    const shotsOnTarget = team.shotsOnTarget || 1;
-    const baseXG = shotsOnTarget * 0.12; // ~12% goal conversion on average
+  private calculateTeamExpectedGoals(team: TeamMatchState): number {
+    if (team.players.length === 0) return 0;
 
-    // Adjust based on shot quality (higher rated players = higher xG)
-    const avgPlayerRating = team.players.reduce((sum: number, p: any) => sum + p.liveRating, 0) / team.players.length;
-    const qualityMultiplier = (avgPlayerRating / 7) * 1.5; // Average rating ~7
+    const avgRating = team.players.reduce((sum, p) => sum + p.rating, 0) / team.players.length;
+    const qualityMultiplier = 0.75 + (avgRating / 100) * 0.5;
 
-    return baseXG * qualityMultiplier;
-  }
-
-  /**
-   * Calculate pass accuracy
-   */
-  private calculatePassAccuracy(team: any): number {
-    if (team.passes === 0) return 0;
-    const completedPasses = team.passes * 0.85; // Assume 85% completion base
-    return (completedPasses / team.passes) * 100;
+    return team.shotsOnTarget * 0.22 * qualityMultiplier + (team.shots - team.shotsOnTarget) * 0.04;
   }
 
   /**
@@ -255,7 +250,7 @@ export class MatchAnalytics {
   /**
    * Generate match report
    */
-  generateMatchReport(analytics: MatchAnalytics): string {
+  generateMatchReport(analytics: MatchAnalyticsType): string {
     let report = `MATCH REPORT: ${analytics.fixture.homeTeamName} ${analytics.finalScore.home} - ${analytics.finalScore.away} ${analytics.fixture.awayTeamName}\n\n`;
 
     report += `Duration: ${Math.floor(analytics.duration)} minutes\n`;
@@ -280,7 +275,7 @@ export class MatchAnalytics {
   /**
    * Get player of the match
    */
-  getPlayerOfTheMatch(analytics: MatchAnalytics): { playerId: string; rating: number } | null {
+  getPlayerOfTheMatch(analytics: MatchAnalyticsType): { playerId: string; rating: number } | null {
     const ratings = Object.entries(analytics.playerRatings);
     if (ratings.length === 0) return null;
 
@@ -293,7 +288,7 @@ export class MatchAnalytics {
   /**
    * Compare match to historical average
    */
-  compareToAverage(analytics: MatchAnalytics): {
+  compareToAverage(analytics: MatchAnalyticsType): {
     homeTeam: string;
     highestPossession: boolean;
     mostShots: boolean;

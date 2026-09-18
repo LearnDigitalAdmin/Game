@@ -77,10 +77,7 @@ export class RestDayCalculator {
       (a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
     );
 
-    // const lastMatch = sorted[0];
     const today = new Date();
-    // const lastMatchDate = new Date(lastMatch.scheduledDate);
-    // const daysSinceLast = Math.floor((today.getTime() - lastMatchDate.getTime()) / (1000 * 60 * 60 * 24));
 
     let fatigueLevel = 0;
     let recoveryNeeded = 0;

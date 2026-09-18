@@ -1,7 +1,7 @@
 // src/global/engine/performance/DevelopmentTracker.ts
 // Player development and long-term progression
 
-import { MatchPlayer, PlayerDevelopment } from '../types/MatchTypes';
+import type { MatchPlayer, PlayerDevelopment } from '../types/MatchTypes';
 
 export class DevelopmentTracker {
   private playerDevelopment: Map<string, PlayerDevelopment> = new Map();
@@ -136,6 +136,13 @@ export class DevelopmentTracker {
   ): number {
     // Base rating change from performance
     let ratingChange = (liveRating - 5) / 10; // -0.5 to +0.5 per match
+
+    // Headroom to potential throttles growth: the closer a player is to his
+    // ceiling, the harder further improvement becomes.
+    if (ratingChange > 0) {
+      const headroom = Math.max(0, potential - liveRating * 10) / 100;
+      ratingChange *= Math.min(1, headroom * 2);
+    }
 
     // Age modifier
     if (age < peakAge) {
@@ -301,17 +308,6 @@ export class DevelopmentTracker {
       dev.age += 1;
       dev.agingFactor = this.calculateAgingFactor(dev.age, 'ST'); // Use average
     }
-  }
-
-  /**
-   * Apply injury recovery penalty/bonus
-   */
-  applyInjuryRecovery(playerId: string, recoveryTime: number): void {
-    const dev = this.playerDevelopment.get(playerId);
-    if (!dev) return;
-
-    // Recovery time reduces playing time, which impacts development
-    // This would integrate with minutes played tracking
   }
 
   /**

@@ -5,7 +5,6 @@ import { TrainingPlan } from "../training/TrainingPlan";
 import { RecentMatches } from "../matches/RecentMatches";
 import { CareerPanel } from "../career/CareerPanel";
 import { AgentOffers } from "../agent/AgentOffers";
-// import { SettingsPanel } from "../../global/settings/SettingsPanel";
 import IntegratedCalendarView from "../../global/calendar/CalendarView";
 
 export function PlayerPages({ page, palette }: { page: string; palette: any }) {
@@ -51,10 +50,10 @@ export function PlayerPages({ page, palette }: { page: string; palette: any }) {
         <AgentOffers palette={palette} />
       </>
     );
-  if (page === "settings")
+  if (page === "calendar")
     return (
       <>
-        <Header title="Settings" subtitle="Preferences" />
+        <Header title="Calendar" subtitle="Season schedule" />
         <IntegratedCalendarView />
       </>
     );

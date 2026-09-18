@@ -61,8 +61,9 @@ export interface MatchPlayer {
   fatigue: number; // 0-100 (0=fresh, 100=exhausted)
   morale: number; // 0-100 (affects performance)
   form: number; // 0-100 (player's recent form)
-  status: 'playing' | 'substituting' | 'substituted' | 'suspended';
+  status: 'playing' | 'substituting' | 'substituted' | 'suspended' | 'injured';
   minutesPlayed: number;
+  fitness: number; // 0-100 match sharpness
 
   // Performance tracking
   touches: number;

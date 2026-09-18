@@ -42,6 +42,9 @@ export function ManagerDashboard({
   const [leagueTable, setLeagueTable] = useState<LeagueTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [userClubPosition, setUserClubPosition] = useState<number>(0);
+  const [topScorers, setTopScorers] = useState<
+    Array<{ playerId: string; firstName: string; lastName: string; clubName: string; goals: number; assists: number }>
+  >([]);
 
   useEffect(() => {
     loadData();
@@ -50,6 +53,7 @@ export function ManagerDashboard({
   useEffect(() => {
     if (currentDivision) {
       loadLeagueTable(currentDivision);
+      loadTopScorers(currentDivision);
     }
   }, [currentDivision, database]);
 
@@ -87,6 +91,17 @@ export function ManagerDashboard({
       }
     } catch (error) {
       console.error('Error loading league table:', error);
+    }
+  };
+
+  const loadTopScorers = async (divisionId: string) => {
+    try {
+      const gameState = await database.getGameState();
+      const season = gameState?.currentSeason ?? '2024-25';
+      const scorers = await database.getTopScorers(divisionId, season, 5);
+      setTopScorers(scorers);
+    } catch (error) {
+      console.error('Error loading top scorers:', error);
     }
   };
 
@@ -263,28 +278,121 @@ export function ManagerDashboard({
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 bg-slate-50 rounded-lg">
               <h6 className="font-medium text-slate-800 mb-2">Top Scorers</h6>
-              <p className="text-sm text-slate-500">Coming soon...</p>
+              {topScorers.length === 0 ? (
+                <p className="text-sm text-slate-500">No goals scored yet this season.</p>
+              ) : (
+                <ol className="space-y-1 text-sm">
+                  {topScorers.map((scorer, i) => (
+                    <li key={scorer.playerId} className="flex justify-between text-slate-700">
+                      <span>
+                        {i + 1}. {scorer.firstName} {scorer.lastName}
+                        <span className="text-slate-400"> · {scorer.clubName}</span>
+                      </span>
+                      <span className="font-semibold">{scorer.goals}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
               <h6 className="font-medium text-slate-800 mb-2">Best Defense</h6>
-              <p className="text-sm text-slate-500">Coming soon...</p>
+              {leagueTable.length === 0 ? (
+                <p className="text-sm text-slate-500">No matches played yet.</p>
+              ) : (
+                <ol className="space-y-1 text-sm">
+                  {[...leagueTable]
+                    .filter((t) => t.played > 0)
+                    .sort((a, b) => a.goalsAgainst - b.goalsAgainst)
+                    .slice(0, 5)
+                    .map((team, i) => (
+                      <li key={team.teamId} className="flex justify-between text-slate-700">
+                        <span>{i + 1}. {team.teamName}</span>
+                        <span className="font-semibold">{team.goalsAgainst}</span>
+                      </li>
+                    ))}
+                </ol>
+              )}
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
-              <h6 className="font-medium text-slate-800 mb-2">Form Table</h6>
-              <p className="text-sm text-slate-500">Last 5 matches</p>
+              <h6 className="font-medium text-slate-800 mb-2">Best Attack</h6>
+              {leagueTable.length === 0 ? (
+                <p className="text-sm text-slate-500">No matches played yet.</p>
+              ) : (
+                <ol className="space-y-1 text-sm">
+                  {[...leagueTable]
+                    .filter((t) => t.played > 0)
+                    .sort((a, b) => b.goalsFor - a.goalsFor)
+                    .slice(0, 5)
+                    .map((team, i) => (
+                      <li key={team.teamId} className="flex justify-between text-slate-700">
+                        <span>{i + 1}. {team.teamName}</span>
+                        <span className="font-semibold">{team.goalsFor}</span>
+                      </li>
+                    ))}
+                </ol>
+              )}
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
-              <h6 className="font-medium text-slate-800 mb-2">Home/Away</h6>
-              <p className="text-sm text-slate-500">Performance split</p>
+              <h6 className="font-medium text-slate-800 mb-2">In-Form Teams</h6>
+              {leagueTable.length === 0 ? (
+                <p className="text-sm text-slate-500">No matches played yet.</p>
+              ) : (
+                <ol className="space-y-1 text-sm">
+                  {[...leagueTable]
+                    .filter((t) => t.played > 0)
+                    .sort((a, b) => {
+                      const score = (form: string) =>
+                        form.split('').reduce((sum, c) => sum + (c === 'W' ? 3 : c === 'D' ? 1 : 0), 0);
+                      return score(b.form) - score(a.form);
+                    })
+                    .slice(0, 5)
+                    .map((team, i) => (
+                      <li key={team.teamId} className="flex items-center justify-between text-slate-700">
+                        <span>{i + 1}. {team.teamName}</span>
+                        <span className="flex gap-0.5">
+                          {team.form.split('').map((_, idx) => (
+                            <span key={idx} className={`w-2 h-2 rounded-full ${getFormColor(team.form, idx)}`} />
+                          ))}
+                        </span>
+                      </li>
+                    ))}
+                </ol>
+              )}
             </div>
           </div>
         )}
 
         {activeView === 'players' && (
-          <div className="text-center py-8">
-            <Users className="w-12 h-12 mx-auto text-slate-400 mb-3" />
-            <h6 className="font-medium text-slate-800 mb-2">Player Statistics</h6>
-            <p className="text-sm text-slate-500">Player stats and comparisons coming soon...</p>
+          <div>
+            <h6 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4" /> Top Scorers This Season
+            </h6>
+            {topScorers.length === 0 ? (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 mx-auto text-slate-400 mb-3" />
+                <p className="text-sm text-slate-500">No player statistics yet. Play some matches to see the leaders.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {topScorers.map((scorer) => (
+                  <div
+                    key={scorer.playerId}
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                  >
+                    <div>
+                      <div className="font-medium text-slate-800">
+                        {scorer.firstName} {scorer.lastName}
+                      </div>
+                      <div className="text-sm text-slate-500">{scorer.clubName}</div>
+                    </div>
+                    <div className="text-right text-sm">
+                      <div className="font-semibold text-slate-800">{scorer.goals} goals</div>
+                      <div className="text-slate-500">{scorer.assists} assists</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

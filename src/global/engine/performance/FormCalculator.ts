@@ -1,7 +1,7 @@
 // src/global/engine/performance/FormCalculator.ts
 // Player form and consistency tracking
 
-import { MatchPlayer, FormTracker } from '../types/MatchTypes';
+import type { MatchPlayer, FormTracker } from '../types/MatchTypes';
 
 export class FormCalculator {
   private playerFormHistory: Map<string, FormTracker> = new Map();
@@ -125,8 +125,10 @@ export class FormCalculator {
     formChange: number;
     momentumChange: number;
   } {
-    // Form change based on performance
-    const formChange = Math.max(-20, Math.min(20, (liveRating - 5) * 4));
+    // Form change based on performance, pulled back toward the player's
+    // established level so a single match cannot transform him.
+    const regression = (50 - player.form) * 0.08;
+    const formChange = Math.max(-20, Math.min(20, (liveRating - 6) * 4 + regression));
 
     // Momentum change more volatile
     const momentumChange = Math.max(-30, Math.min(30, (liveRating - 5) * 6));

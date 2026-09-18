@@ -1,5 +1,4 @@
 import { Calendar } from "lucide-react";
-// import { SettingsPanel } from "../../global/settings/SettingsPanel";
 import { OwnerDashboard } from "../dashboard/OwnerDashboard";
 import { StadiumPanel } from "../facilities/StadiumPanel";
 import { FinancePanel } from "../finances/FinancePanel";
@@ -58,10 +57,10 @@ export function OwnerPages({ page, palette }: { page: string; palette: any }) {
         <MediaPanel/>
       </>
     );
-  if (page === "settings")
+  if (page === "calendar")
     return (
       <>
-        <Header title="Settings" subtitle="Preferences" />
+        <Header title="Calendar" subtitle="Season schedule" />
         <IntegratedCalendarView />
       </>
     );

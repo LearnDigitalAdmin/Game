@@ -2,6 +2,7 @@
 import { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { generateAllPlayers, type Player } from '../utils/PlayerGeneration';
 import SQLiteConnectionManager from './Initializer';
+import { FixtureGenerator } from '../fixtures/FixtureGenerator';
 
 // ===== INTERFACES =====
 
@@ -32,6 +33,7 @@ export interface ClubData {
   facilities: number;
   training: number;
   youth: number;
+  formation: string;
 }
 
 export interface ManagerData {
@@ -688,10 +690,10 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
 
       return {
         statement: `INSERT OR REPLACE INTO clubs (id, name, division_id, country_id, rank, status, balance, 
-                    reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    reputation, board_confidence, fan_support, transfer_budget, wage_budget, facilities, training, youth, formation)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values: [club.id, club.name, club.divisionId, club.countryId, club.rank, club.status, club.balance,
-                'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50]
+                'Local', 75, 75, transferBudget, wageBudget, 50, 50, 50, '4-4-2']
       };
     });
 
@@ -727,6 +729,10 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
       await this.db.executeSet(tableStatements);
     }
 
+    // === GENERATE AND BULK INSERT FIXTURES ===
+    console.log('Generating season fixtures...');
+    await this.generateSeasonFixtures(divisions, clubs, '2024-25', '2024-08-01');
+
     // === GENERATE AND BULK INSERT PLAYERS ===
     console.log('Generating players with proper name data...');
     
@@ -760,6 +766,74 @@ private async loadGameDataFast(selectedCountries: string[], _userClub: any): Pro
     console.error('Error loading game data:', error);
     throw error;
   }
+}
+
+/**
+ * Build a full double round-robin for every division and persist it, so the
+ * season has a complete schedule from the moment the save is created.
+ */
+private async generateSeasonFixtures(
+  divisions: any[],
+  clubs: any[],
+  season: string,
+  startDate: string
+): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const statements: any[] = [];
+
+  for (const division of divisions) {
+    const divisionClubs = clubs
+      .filter((club: any) => club.divisionId === division.id)
+      .map((club: any) => ({ id: club.id, name: club.name }));
+
+    if (divisionClubs.length < 2) {
+      console.warn(`Skipping fixtures for ${division.id}: needs at least two clubs`);
+      continue;
+    }
+
+    const { fixtures } = FixtureGenerator.generateLeagueFixtures({
+      season,
+      divisionId: division.id,
+      clubs: divisionClubs,
+      startDate,
+      scheduleType: 'round_robin',
+    });
+
+    for (const fixture of fixtures) {
+      statements.push({
+        statement: `INSERT OR REPLACE INTO fixtures (id, division_id, home_team_id, away_team_id,
+                    home_team_name, away_team_name, matchday, date, time, status,
+                    home_score, away_score, attendance, venue, competition)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [
+          fixture.id,
+          fixture.divisionId,
+          fixture.homeTeamId,
+          fixture.awayTeamId,
+          fixture.homeTeamName,
+          fixture.awayTeamName,
+          fixture.matchday ?? 1,
+          fixture.scheduledDate,
+          fixture.scheduledTime,
+          'scheduled',
+          null,
+          null,
+          null,
+          fixture.venue,
+          'league',
+        ],
+      });
+    }
+  }
+
+  // Batched so a large multi-division save does not exhaust the driver.
+  const batchSize = 200;
+  for (let i = 0; i < statements.length; i += batchSize) {
+    await this.db.executeSet(statements.slice(i, i + batchSize));
+  }
+
+  console.log(`Inserted ${statements.length} fixtures`);
 }
 
 // ===== OPTIMIZED BULK PLAYER INSERTION =====
@@ -1512,6 +1586,38 @@ async getGameState(): Promise<GameState | null> {
   }
 
   // ===== SEARCH OPERATIONS =====
+
+  /**
+   * Top scorers for a division in a season, joining season totals back to
+   * the players and clubs they belong to.
+   */
+  async getTopScorers(
+    divisionId: string,
+    season: string,
+    limit: number = 5
+  ): Promise<Array<{ playerId: string; firstName: string; lastName: string; clubName: string; goals: number; assists: number }>> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = await this.db.query(
+      `SELECT p.id as player_id, p.first_name, p.last_name, c.name as club_name, ph.goals, ph.assists
+       FROM player_history ph
+       JOIN players p ON p.id = ph.player_id
+       JOIN clubs c ON c.id = ph.club_id
+       WHERE c.division_id = ? AND ph.season = ? AND ph.goals > 0
+       ORDER BY ph.goals DESC, ph.assists DESC
+       LIMIT ?`,
+      [divisionId, season, limit]
+    );
+
+    return (result.values || []).map((row: any) => ({
+      playerId: row.player_id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      clubName: row.club_name,
+      goals: row.goals,
+      assists: row.assists,
+    }));
+  }
 
   async getPlayerStats(playerId: string, season?: string): Promise<any> {
     if (!this.db) throw new Error('Database not initialized');

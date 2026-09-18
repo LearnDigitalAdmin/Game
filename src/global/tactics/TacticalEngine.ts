@@ -282,6 +282,7 @@ export class TacticalEngine {
       attack_width: row.attack_width as number,
       passing_style: row.passing_style as any,
       build_up_play: row.build_up_play as any,
+      corner_strategy: (row.corner_strategy as string) ?? '',
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
     };

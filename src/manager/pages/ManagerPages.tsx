@@ -45,7 +45,7 @@ export function ManagerPages({
     return (
       <>
         <Header title="Tactics" subtitle="Shape & instructions" />
-        <TacticsPanel managerData={managerData} />
+        <TacticsPanel managerData={managerData} database={database} />
       </>
     );
   if (page === "transfers")
@@ -69,10 +69,10 @@ export function ManagerPages({
         <ClubPanel database={database} managerData={managerData} />
       </>
     );
-  if (page === "settings")
+  if (page === "calendar")
     return (
       <>
-        <Header title="Settings" subtitle="Preferences" />
+        <Header title="Calendar" subtitle="Season schedule" />
         <IntegratedCalendarView />
       </>
     );

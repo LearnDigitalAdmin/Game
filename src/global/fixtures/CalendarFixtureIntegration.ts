@@ -1,7 +1,6 @@
 // src/global/fixtures/CalendarFixtureIntegration.ts
 // Seamless integration between Calendar system and Fixtures
 
-//import type { CalendarEvent, CalendarEventType } from '../calendar/IntegratedCalendar';
 import type { CalendarEvent, CalendarEventType } from '../calendar/Calendar';
 import type { Fixture } from './FixtureDatabaseSchema';
 import { v4 as uuidv4 } from 'uuid';

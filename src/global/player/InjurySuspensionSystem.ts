@@ -155,9 +155,6 @@ export class InjurySuspensionSystem {
       if (!result.values?.length) return null;
 
       const row = result.values[0];
-      // const startDate = new Date(row.start_date);
-      // const now = new Date();
-      // const daysElapsed = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
 
       return {
         id: row.id,

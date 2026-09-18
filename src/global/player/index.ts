@@ -23,8 +23,3 @@ export { PlayerRatingGenerator } from './PlayerRatingGenerator';
 
 export { InjurySuspensionSystem } from './InjurySuspensionSystem';
 
-export { PlayerGenerator } from './PlayerGenerator';
-
-export { PlayerStatisticsSystem } from './PlayerStatisticsSystem';
-
-export { default as PlayerGenerationExample } from './PlayerGenerationExample';

@@ -40,9 +40,9 @@ export class EventRecorder {
     this.eventLog.push(log);
 
     // Log to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[${event.minute.toFixed(1)}'] ${event.description}`);
-    }
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log(`[${event.minute.toFixed(1)}'] ${event.description}`);
+    // }
   }
 
   /**

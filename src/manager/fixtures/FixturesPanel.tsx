@@ -1,8 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Sparkles, Calendar, MapPin, Clock, Users } from "lucide-react";
 import { Stat } from "../../global/components/Stat";
 import { Modal, LoadingSpinner } from "../../global/components/Modal";
-import type { FootballManagerDB } from "../../global/database/Save";
+import type { FootballManagerDB, Fixture as SaveFixture } from "../../global/database/Save";
+import { MatchService, DEFAULT_FORMATION, FORMATIONS } from "../../global/engine/MatchService";
+import { MatchContainer } from "../../global/engine/MatchContainer";
+import type { MatchSetup } from "../../global/engine/types/MatchTypes";
+import type { MatchResult } from "../../global/engine/MatchEngine";
 
 interface Fixture {
   id: string;
@@ -36,6 +40,12 @@ export function FixturesPanel({
   const [upcomingFixtures, setUpcomingFixtures] = useState<Fixture[]>([]);
   const [recentResults, setRecentResults] = useState<Fixture[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [activeSetup, setActiveSetup] = useState<MatchSetup | null>(null);
+  const [activeFixture, setActiveFixture] = useState<SaveFixture | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+
+  const matchService = useMemo(() => new MatchService(database), [database]);
 
   useEffect(() => {
     loadFixtures();
@@ -72,6 +82,59 @@ export function FixturesPanel({
       console.error('Error loading fixtures:', error);
     } finally {
       setDataLoading(false);
+    }
+  };
+
+  /**
+   * Open the live match for a fixture. Anything still outstanding from an
+   * earlier date is settled first so the table is current at kick-off.
+   */
+  const handlePlayMatch = async (fixture: SaveFixture) => {
+    setPreparing(true);
+    setMatchError(null);
+
+    try {
+      await matchService.simulateDueFixtures(fixture.date, fixture.id);
+
+      const club = managerData.selectedClub?.id ? await database.getClub(managerData.selectedClub.id) : null;
+      const userFormation = FORMATIONS.find((f) => f.name === club?.formation) ?? DEFAULT_FORMATION;
+
+      const setup = await matchService.prepareMatch(
+        fixture,
+        managerData.selectedClub?.id,
+        userFormation
+      );
+
+      if (!setup) {
+        setMatchError('This fixture cannot be played because a squad is missing.');
+        return;
+      }
+
+      setActiveFixture(fixture);
+      setActiveSetup(setup);
+    } catch (error) {
+      console.error('Failed to start match:', error);
+      setMatchError('Something went wrong starting the match.');
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  /**
+   * Store the result, play out the rest of the matchday, and refresh.
+   */
+  const handleMatchComplete = async (result: MatchResult) => {
+    if (!activeFixture) return;
+
+    try {
+      await matchService.applyResult(activeFixture, result);
+      await matchService.simulateDueFixtures(activeFixture.date);
+    } catch (error) {
+      console.error('Failed to record match result:', error);
+    } finally {
+      setActiveSetup(null);
+      setActiveFixture(null);
+      await loadFixtures();
     }
   };
 
@@ -146,6 +209,21 @@ export function FixturesPanel({
 
   const stats = getFixtureStats();
 
+  if (activeSetup) {
+    return (
+      <div className="col-span-12 fixed inset-0 z-50">
+        <MatchContainer
+          setup={activeSetup}
+          onMatchComplete={handleMatchComplete}
+          onClose={() => {
+            setActiveSetup(null);
+            setActiveFixture(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (dataLoading) {
     return (
       <div className="col-span-12 p-6 bg-white rounded-2xl shadow-sm border border-slate-200">
@@ -186,6 +264,12 @@ export function FixturesPanel({
         />
       </div>
 
+      {matchError && (
+        <div className="col-span-12 mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+          {matchError}
+        </div>
+      )}
+
       {/* Next Fixture Highlight */}
       {upcomingFixtures.length > 0 && (
         <div className="col-span-12 mb-6">
@@ -215,9 +299,16 @@ export function FixturesPanel({
                     : `${upcomingFixtures[0].awayTeamName} @ ${upcomingFixtures[0].homeTeamName}`
                   }
                 </div>
-                <div className="text-sm text-slate-500">
+                <div className="text-sm text-slate-500 mb-3">
                   Matchday {upcomingFixtures[0].matchday} • {upcomingFixtures[0].competition}
                 </div>
+                <button
+                  onClick={() => handlePlayMatch(upcomingFixtures[0])}
+                  disabled={preparing}
+                  className="px-5 py-2.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                >
+                  {preparing ? 'Preparing...' : 'Play Match'}
+                </button>
               </div>
             </div>
           </div>
