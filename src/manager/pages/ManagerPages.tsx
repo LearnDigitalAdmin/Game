@@ -2,7 +2,6 @@
 import { Calendar } from "lucide-react";
 import { ManagerDashboard } from "../dashboard/ManagerDashboard";
 import { SquadPanel } from "../squad/SquadPanel";
-// import { SettingsPanel } from "../../global/settings/SettingsPanel";
 import { ClubPanel } from "../club/ClubPanel";
 import { FixturesPanel } from "../fixtures/FixturesPanel";
 import { TacticsPanel } from "../tactics/TacticsPanel";

@@ -1,7 +1,8 @@
 // src/global/calendar/IntegratedCalendar.tsx
 import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { FootballManagerDB, gameDB } from '../database/Save';
+import SQLiteConnectionManager from '../database/Initializer';
 
 // Types
 export type Speed = 'slow' | 'default' | 'fast' | 'faster' | 'holiday';
@@ -110,11 +111,11 @@ export interface CalendarAPI {
 
 // Speed mapping
 const SPEED_INTERVALS: Record<Speed, number> = {
-  slow: 3000,
-  default: 1000,
-  fast: 500,
-  faster: 200,
-  holiday: 0,
+  slow: 60000,
+  default: 30000,
+  fast: 15000,
+  faster: 6000,
+  holiday: 1000,
 };
 
 // Utility functions
@@ -162,7 +163,7 @@ const generateId = (): string => {
 class IntegratedCalendarEngine {
   private db: SQLiteDBConnection | null = null;
   private gameDb: FootballManagerDB;
-  private sqlite: SQLiteConnection;
+  private connectionManager: SQLiteConnectionManager;
   private tickInterval: NodeJS.Timeout | null = null;
   private eventHandlers: Map<CalendarEventType, Set<(e: CalendarEvent) => Promise<void> | void>> = new Map();
   private userClubId: string | null = null;
@@ -177,54 +178,88 @@ class IntegratedCalendarEngine {
     currentSeason: '2024-25',
   };
 
-  constructor() {
-    this.sqlite = new SQLiteConnection(CapacitorSQLite);
-    this.gameDb = gameDB;
-  }
+//   constructor() {
+//     this.sqlite = new SQLiteConnection(CapacitorSQLite);
+//     this.gameDb = gameDB;
+//   }
 
   get state(): CalendarState {
     return { ...this._state };
   }
 
+  constructor() {
+    this.connectionManager = SQLiteConnectionManager.getInstance();
+    this.gameDb = gameDB;
+  }
+
   private async initCalendarDB(): Promise<void> {
-    // if (this.db) return;
-
     try {
-      // Use separate calendar database or shared database
-    //   const connectionExists = await this.sqlite.isConnection("calendar", false);
+      console.log('Initializing Calendar Database...');
       
-    //   if (connectionExists.result) {
-    //     this.db = await this.sqlite.retrieveConnection("calendar", false);
-    //   } else {
-    //     this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
-    //   }
-      
-    //   await this.db.open();
-
-
-
-      const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
-    
-    // Check if connection exists (requires database name and readonly boolean)
-    const connectionExists = await this.sqlite.isConnection("calendar", false);
-    
-    if (checkConnectionsConsistency.result && connectionExists.result) {
-      // Connection exists and is consistent, retrieve it
-      this.db = await this.sqlite.retrieveConnection("calendar", false);
-    } else {
-      // No connection exists or inconsistent, create new one
-      this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
-    }
-    
-    await this.db.open();
-      
-      // Create calendar-specific tables
+      this.db = await this.connectionManager.getConnection("calendar");
       await this.createCalendarTables();
+      
+      console.log('Calendar Database initialized successfully');
+      this.play();
     } catch (error) {
       console.error('Calendar database initialization failed:', error);
       throw error;
     }
   }
+
+  async destroy(): Promise<void> {
+    if (this.tickInterval) {
+      clearInterval(this.tickInterval);
+      this.tickInterval = null;
+    }
+
+    if (this.db) {
+      await this.connectionManager.closeConnection("calendar");
+      this.db = null;
+    }
+
+    this.eventHandlers.clear();
+  }
+
+//   private async initCalendarDB(): Promise<void> {
+//     // if (this.db) return;
+
+//     try {
+//       // Use separate calendar database or shared database
+//     //   const connectionExists = await this.sqlite.isConnection("calendar", false);
+      
+//     //   if (connectionExists.result) {
+//     //     this.db = await this.sqlite.retrieveConnection("calendar", false);
+//     //   } else {
+//     //     this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
+//     //   }
+      
+//     //   await this.db.open();
+
+
+
+//       const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
+    
+//     // Check if connection exists (requires database name and readonly boolean)
+//     const connectionExists = await this.sqlite.isConnection("calendar", false);
+    
+//     if (checkConnectionsConsistency.result && connectionExists.result) {
+//       // Connection exists and is consistent, retrieve it
+//       this.db = await this.sqlite.retrieveConnection("calendar", false);
+//     } else {
+//       // No connection exists or inconsistent, create new one
+//       this.db = await this.sqlite.createConnection("calendar", false, "no-encryption", 1, false);
+//     }
+    
+//     await this.db.open();
+      
+//       // Create calendar-specific tables
+//       await this.createCalendarTables();
+//     } catch (error) {
+//       console.error('Calendar database initialization failed:', error);
+//       throw error;
+//     }
+//   }
 
   private async createCalendarTables(): Promise<void> {
     if (!this.db) throw new Error('Calendar database not initialized');
@@ -1214,19 +1249,19 @@ class IntegratedCalendarEngine {
   }
 
   // Cleanup method
-  async destroy(): Promise<void> {
-    if (this.tickInterval) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = null;
-    }
+//   async destroy(): Promise<void> {
+//     if (this.tickInterval) {
+//       clearInterval(this.tickInterval);
+//       this.tickInterval = null;
+//     }
 
-    if (this.db) {
-      await this.db.close();
-      this.db = null;
-    }
+//     if (this.db) {
+//       await this.db.close();
+//       this.db = null;
+//     }
 
-    this.eventHandlers.clear();
-  }
+//     this.eventHandlers.clear();
+//   }
 }
 
 // Context and Hooks

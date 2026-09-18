@@ -1,4 +1,4 @@
-// src/App.tsx - Complete Integration with Calendar System
+// src/App.tsx - Complete Integration with Load Save System
 import { useState, useEffect } from "react";
 import { LandingScreen } from "./global/screens/LandingScreen";
 import { ModeSelection } from "./global/screens/ModeSelection";
@@ -10,7 +10,7 @@ import { MODES, type GameState, type Mode } from "./global/types/GameTypes";
 import { ModeHome } from "./global/layout/ModeHome";
 import { CalendarProvider } from "./global/calendar/Calendar";
 import IntegratedCalendarView from "./global/calendar/CalendarView";
-
+import { LoadSaveModal } from "./global/layout/LoadSaveModal";
 // Updated manager data interface to match the new setup flow
 interface ManagerData {
   // Basic manager info
@@ -48,6 +48,8 @@ export default function App() {
   const [currentSaveId, setCurrentSaveId] = useState<string | null>(null);
   const [loadingMessage, setLoadingMessage] = useState("Initializing...");
   const [calendarInitialized, setCalendarInitialized] = useState(false);
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [, setStartPage] = useState<string>('home');
   const [managerData, setManagerData] = useState<ManagerData>({
     name: "",
     age: 35,
@@ -183,6 +185,7 @@ export default function App() {
       
       const saveId = await gameDB.createSave({
         name: `${selectedClub.name} Save`,
+        mode: 'manager', // Add the mode here
         managerData: updatedManagerData,
         clubData: selectedClub,
         selectedCountries: updatedManagerData.selectedCountries
@@ -211,6 +214,54 @@ export default function App() {
       setDbError('Failed to create save file. Please try again.');
       setGameState("managerClubSelect");
     }
+  };
+
+  // Handle showing load modal
+  const handleShowLoadModal = () => {
+    setShowLoadModal(true);
+  };
+
+  // Handle loading a save file
+  const handleLoadSave = async (saveData: any) => {
+    try {
+      console.log('Loading save:', saveData);
+      setLoadingMessage("Loading save file...");
+      setGameState("loading");
+
+      // Set current save ID
+      setCurrentSaveId(saveData.saveId);
+
+      // Restore manager data from save
+      setManagerData({
+        ...saveData.managerData,
+        selectedClub: saveData.managerData.selectedClub,
+        selectedCountries: saveData.managerData.selectedCountries || []
+      });
+
+      // Set starting page from save
+      setStartPage(saveData.startPage || 'home');
+
+      // Mark calendar as ready
+      setCalendarInitialized(true);
+
+      // Load the save in database
+      await gameDB.loadSave(saveData.saveId);
+      
+      setLoadingMessage("Restoring game state...");
+
+      // Short delay for UX
+      setTimeout(() => {
+        // Navigate to the correct mode
+        setGameState(saveData.mode);
+      }, 1500);
+
+    } catch (error) {
+      console.error('Error loading save:', error);
+      setDbError('Failed to load save file. Please try again.');
+      setGameState("landing");
+    }
+    
+    setShowLoadModal(false);
   };
 
   // Helper function to get user club ID
@@ -267,7 +318,19 @@ export default function App() {
   // Render with debug logs
   if (gameState === "landing") {
     console.log('Rendering LandingScreen'); // DEBUG LOG
-    return <LandingScreen setGameState={setGameState}/>;
+    return (
+      <>
+        <LandingScreen 
+          setGameState={setGameState} 
+          onLoadSave={handleShowLoadModal}
+        />
+        <LoadSaveModal
+          open={showLoadModal}
+          onClose={() => setShowLoadModal(false)}
+          onLoadSave={handleLoadSave}
+        />
+      </>
+    );
   }
   
   if (gameState === "modeSelect") {
@@ -349,6 +412,7 @@ export default function App() {
             managerData={managerData}
             database={gameDB}
             saveId={currentSaveId}
+            //startPage={startPage}
           />
         </CalendarProvider>
       );

@@ -23,7 +23,7 @@ function GameHeader({
   onSave: () => void;
   onExit: () => void;
 }) {
-  const { state, play, pause, nextHour, nextDay } = useCalendar();
+  const { state, nextDay } = useCalendar();
   const blockingEvents = useBlockingEvents();
   
   const formatDisplayDate = (date: Date): string => {
@@ -93,7 +93,7 @@ function GameHeader({
 
         {/* Time Control Buttons */}
         <div className="flex items-center gap-2">
-          <button
+          {/* <button
             onClick={state.paused ? play : pause}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
               state.paused
@@ -104,40 +104,43 @@ function GameHeader({
             title={blockingEvents.length > 0 ? 'Resolve pending events first' : undefined}
           >
             {state.paused ? '▶️ Play' : '⏸️ Pause'}
-          </button>
+          </button> */}
 
-          <button
+          {/* <button
             onClick={nextHour}
             disabled={!state.paused}
             className="px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-400 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium transition-all duration-200"
             title="Advance one hour"
           >
             ⏭️ Hour
-          </button>
+          </button> */}
 
-          <button
-            onClick={nextDay}
-            className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-white font-medium shadow-lg transition-all duration-200"
-            title="Advance to next day"
-          >
-            📅 Day
-          </button>
-        </div>
-
-        {/* Menu Buttons */}
-        <div className="flex items-center gap-2 ml-2 border-l border-white/20 pl-3">
-          <button
-            onClick={onSave}
-            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-all duration-200"
-          >
-            💾 Save
-          </button>
           <button
             onClick={onExit}
             className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-all duration-200"
           >
             🚪 Exit
           </button>
+          <button
+            onClick={onSave}
+            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-all duration-200"
+          >
+            💾 Save
+          </button>
+        </div>
+
+        {/* Menu Buttons */}
+        <div className="flex items-center gap-2 ml-2 border-l border-white/20 pl-3">
+        
+
+          <button
+            onClick={nextDay}
+            className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-white font-medium shadow-lg transition-all duration-200"
+            title="Advance to next day"
+          >
+            📅 NEXT Day
+          </button>
+          
         </div>
       </div>
     </div>

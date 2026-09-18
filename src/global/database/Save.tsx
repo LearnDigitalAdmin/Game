@@ -1,6 +1,7 @@
 // src/global/database/Save.tsx - Football Manager Game Database Handler
-import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { generateAllPlayers, type Player } from '../utils/PlayerGeneration';
+import SQLiteConnectionManager from './Initializer';
 
 // ===== INTERFACES =====
 
@@ -127,15 +128,60 @@ export interface GameState {
   notifications: any[];
 }
 
+export interface SaveFile {
+  id: string;
+  name: string;
+  mode: 'player' | 'manager' | 'owner';
+  clubName: string;
+  managerName: string;
+  season: string;
+  gameDate: string;
+  lastPlayed: string;
+  createdAt: string;
+  currentPage?: string; // For remembering the last active page
+  gameTime: string; // Calendar time for display
+  matchday: number;
+  achievements: string[]; // Save milestones/achievements
+  playtime: number; // Total playtime in minutes
+  difficulty: string; // Game difficulty setting
+  reputation: number; // Manager/club reputation
+}
+
+
+
 // ===== DATABASE MANAGER CLASS =====
 
 export class FootballManagerDB {
-  private sqlite: SQLiteConnection;
+  private connectionManager: SQLiteConnectionManager;
   private db: SQLiteDBConnection | null = null;
   private isReady: boolean = false;
 
   constructor() {
-    this.sqlite = new SQLiteConnection(CapacitorSQLite);
+    this.connectionManager = SQLiteConnectionManager.getInstance();
+  }
+
+    async initialize(): Promise<void> {
+    try {
+      console.log('Initializing Football Manager Database...');
+      
+      this.db = await this.connectionManager.getConnection("footballmanager");
+      await this.createTables();
+      this.isReady = true;
+      
+      console.log('Football Manager Database initialized successfully');
+    } catch (error) {
+      console.error('Error initializing Football Manager database:', error);
+      throw error;
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.db) {
+      await this.connectionManager.closeConnection("footballmanager");
+      this.db = null;
+      this.isReady = false;
+      console.log('Football Manager Database connection closed');
+    }
   }
 
   private async createTables(): Promise<void> {
@@ -144,43 +190,54 @@ export class FootballManagerDB {
     const tables = [
       // Save files metadata
       `CREATE TABLE IF NOT EXISTS save_files (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        club_name TEXT NOT NULL,
-        manager_name TEXT NOT NULL,
-        season TEXT NOT NULL,
-        game_date TEXT NOT NULL,
-        last_played TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )`,
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'manager',
+      club_name TEXT NOT NULL,
+      manager_name TEXT NOT NULL,
+      season TEXT NOT NULL,
+      game_date TEXT NOT NULL,
+      last_played TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      current_page TEXT DEFAULT 'home',
+      game_time TEXT NOT NULL,
+      matchday INTEGER NOT NULL DEFAULT 1,
+      achievements TEXT DEFAULT '[]',
+      playtime INTEGER NOT NULL DEFAULT 0,
+      difficulty TEXT DEFAULT 'Normal',
+      reputation INTEGER NOT NULL DEFAULT 50
+    )`,
 
-      // Game state
-      `CREATE TABLE IF NOT EXISTS game_state (
-        id TEXT PRIMARY KEY DEFAULT 'main',
-        current_date TEXT NOT NULL,
-        current_season TEXT NOT NULL,
-        current_matchday INTEGER NOT NULL DEFAULT 1,
-        game_speed TEXT NOT NULL DEFAULT 'paused',
-        auto_save BOOLEAN NOT NULL DEFAULT 1,
-        notifications TEXT DEFAULT '[]'
-      )`,
+    // Enhanced game_state table
+    `CREATE TABLE IF NOT EXISTS game_state (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      current_date TEXT NOT NULL,
+      current_season TEXT NOT NULL,
+      current_matchday INTEGER NOT NULL DEFAULT 1,
+      game_speed TEXT NOT NULL DEFAULT 'paused',
+      auto_save BOOLEAN NOT NULL DEFAULT 1,
+      notifications TEXT DEFAULT '[]',
+      save_id TEXT,
+      mode TEXT DEFAULT 'manager'
+    )`,
 
-      // Manager data
-      `CREATE TABLE IF NOT EXISTS managers (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        age INTEGER NOT NULL,
-        nationality TEXT NOT NULL,
-        coaching_style TEXT NOT NULL,
-        country_id TEXT NOT NULL,
-        country_federation TEXT NOT NULL,
-        country_rank INTEGER NOT NULL,
-        club_id TEXT NOT NULL,
-        contract_length INTEGER NOT NULL DEFAULT 2,
-        salary INTEGER NOT NULL DEFAULT 50000,
-        reputation INTEGER NOT NULL DEFAULT 50,
-        experience INTEGER NOT NULL DEFAULT 0
-      )`,
+    // Enhanced managers table
+    `CREATE TABLE IF NOT EXISTS managers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      age INTEGER NOT NULL,
+      nationality TEXT NOT NULL,
+      coaching_style TEXT NOT NULL,
+      country_id TEXT NOT NULL,
+      country_federation TEXT NOT NULL,
+      country_rank INTEGER NOT NULL,
+      club_id TEXT NOT NULL,
+      contract_length INTEGER NOT NULL DEFAULT 2,
+      salary INTEGER NOT NULL DEFAULT 50000,
+      reputation INTEGER NOT NULL DEFAULT 50,
+      experience INTEGER NOT NULL DEFAULT 0,
+      save_id TEXT
+    )`,
 
       // Clubs data
       `CREATE TABLE IF NOT EXISTS clubs (
@@ -365,107 +422,219 @@ export class FootballManagerDB {
       await this.db.execute(index);
     }
   }
-
-  // ===== SAVE FILE MANAGEMENT =====
-
-// ===== UPDATED DATABASE INITIALIZATION =====
-
-// ===== FIXED DATABASE INITIALIZATION =====
-
-async initialize(): Promise<void> {
-  try {
-    console.log('Initializing Football Manager Database...');
-    
-    // Check connections consistency
-    const checkConnectionsConsistency = await this.sqlite.checkConnectionsConsistency();
-    
-    // Check if connection exists (requires database name and readonly boolean)
-    const connectionExists = await this.sqlite.isConnection("footballmanager", false);
-    
-    if (checkConnectionsConsistency.result && connectionExists.result) {
-      // Connection exists and is consistent, retrieve it
-      this.db = await this.sqlite.retrieveConnection("footballmanager", false);
-    } else {
-      // No connection exists or inconsistent, create new one
-      this.db = await this.sqlite.createConnection("footballmanager", false, "no-encryption", 1, false);
-    }
-    
-    await this.db.open();
-    
-    // Create tables without PRAGMA statements
-    await this.createTables();
-    this.isReady = true;
-    
-    console.log('Football Manager Database initialized successfully');
-  } catch (error) {
-    console.error('Error initializing database:', error);
-    throw error;
-  }
-}
-
-// ===== SIMPLIFIED CREATE SAVE METHOD (NO TRANSACTIONS) =====
-
-// ===== HIGH-SPEED OPTIMIZED CREATE SAVE METHOD =====
+  
+  // Add to FootballManagerDB class:
 
 async createSave(saveData: {
   name: string;
+  mode: 'player' | 'manager' | 'owner';
   managerData: any;
   clubData: any;
   selectedCountries: string[];
+  currentPage?: string;
 }): Promise<string> {
   if (!this.db) throw new Error('Database not initialized');
 
   const saveId = `save_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const currentDate = new Date().toISOString();
+  const gameStartDate = '2024-08-01';
 
   try {
-    console.log('Creating save file record...');
+    console.log('Creating enhanced save file record...');
     
-    // Create save file record
+    // Create comprehensive save file record
     await this.db.run(
-      `INSERT INTO save_files (id, name, club_name, manager_name, season, game_date, last_played, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [saveId, saveData.name, saveData.clubData.name, saveData.managerData.name, '2024-25', '2024-08-01', currentDate, currentDate]
+      `INSERT INTO save_files (id, name, mode, club_name, manager_name, season, game_date, 
+                              last_played, created_at, current_page, game_time, matchday, 
+                              achievements, playtime, difficulty, reputation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        saveId, 
+        saveData.name, 
+        saveData.mode,
+        saveData.clubData.name, 
+        saveData.managerData.name, 
+        '2024-25', 
+        gameStartDate,
+        currentDate, 
+        currentDate, 
+        saveData.currentPage || 'home',
+        gameStartDate, // Initial game time
+        1, // Initial matchday
+        JSON.stringify([]), // Empty achievements initially
+        0, // Initial playtime
+        'Normal', // Default difficulty
+        saveData.managerData.reputation || 50
+      ]
     );
 
-    console.log('Initializing game state...');
-    
-    // Initialize game state
+    // Initialize comprehensive game state
     await this.db.run(
-      `INSERT OR REPLACE INTO game_state (current_date, current_season, current_matchday, game_speed, auto_save, notifications)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      ['2024-08-01', '2024-25', 1, 'paused', 1, '[]']
-    );
-
-    console.log('Creating manager record...');
-    
-    // Create manager record
-    await this.db.run(
-      `INSERT OR REPLACE INTO managers (id, name, age, nationality, coaching_style, country_id, country_federation, country_rank, club_id)
+      `INSERT OR REPLACE INTO game_state (id, current_date, current_season, current_matchday, 
+                                         game_speed, auto_save, notifications, save_id, mode)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['manager_1', saveData.managerData.name, saveData.managerData.age, saveData.managerData.nationality, 
-       saveData.managerData.coachingStyle, saveData.managerData.countryId, saveData.managerData.countryFederation, 
-       saveData.managerData.countryRank, saveData.clubData.id]
+      ['main', gameStartDate, '2024-25', 1, 'paused', 1, '[]', saveId, saveData.mode]
     );
 
-    console.log('Loading game data at high speed...');
-    
-    // Load game data using high-speed method
+    // Create manager record with full data
+    await this.db.run(
+      `INSERT OR REPLACE INTO managers (id, name, age, nationality, coaching_style, country_id, 
+                                       country_federation, country_rank, club_id, save_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'manager_1', saveData.managerData.name, saveData.managerData.age, 
+        saveData.managerData.nationality, saveData.managerData.coachingStyle, 
+        saveData.managerData.countryId, saveData.managerData.countryFederation, 
+        saveData.managerData.countryRank, saveData.clubData.id, saveId
+      ]
+    );
+
+    console.log('Loading game data for save...');
     await this.loadGameDataFast(saveData.selectedCountries, saveData.clubData);
     
-    console.log(`Save file created successfully: ${saveId}`);
+    console.log(`Enhanced save file created successfully: ${saveId}`);
     return saveId;
     
   } catch (error) {
-    console.error('Error creating save:', error);
+    console.error('Error creating enhanced save:', error);
     
-    // Try to clean up the save file if it was created
+    // Cleanup on failure
     try {
       await this.db.run('DELETE FROM save_files WHERE id = ?', [saveId]);
+      await this.db.run('DELETE FROM game_state WHERE save_id = ?', [saveId]);
+      await this.db.run('DELETE FROM managers WHERE save_id = ?', [saveId]);
       console.log('Cleaned up failed save file');
     } catch (cleanupError) {
       console.error('Failed to cleanup failed save:', cleanupError);
     }
+    throw error;
+  }
+}
+
+async updateSaveProgress(saveId: string, updates: {
+  gameDate?: string;
+  gameTime?: string;
+  season?: string;
+  matchday?: number;
+  currentPage?: string;
+  playtime?: number;
+  achievements?: string[];
+  reputation?: number;
+}): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const setParts: string[] = [];
+  const values: any[] = [];
+
+  // Always update last_played
+  setParts.push('last_played = ?');
+  values.push(new Date().toISOString());
+
+  Object.entries(updates).forEach(([key, value]) => {
+    if (value !== undefined) {
+      const dbKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      setParts.push(`${dbKey} = ?`);
+      values.push(typeof value === 'object' ? JSON.stringify(value) : value);
+    }
+  });
+
+  if (setParts.length === 0) return;
+
+  values.push(saveId);
+  
+  await this.db.run(
+    `UPDATE save_files SET ${setParts.join(', ')} WHERE id = ?`,
+    values
+  );
+}
+
+async getSaveFiles(): Promise<SaveFile[]> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  const result = await this.db.query(`
+    SELECT sf.*, 
+           COALESCE(sf.game_time, sf.game_date) as display_date,
+           COALESCE(sf.playtime, 0) as total_playtime,
+           COALESCE(sf.achievements, '[]') as save_achievements
+    FROM save_files sf 
+    ORDER BY sf.last_played DESC
+  `);
+  
+  return (result.values || []).map(row => ({
+    ...this.convertDbRowToCamelCase(row),
+    achievements: typeof row.achievements === 'string' 
+      ? JSON.parse(row.achievements || '[]') 
+      : (row.achievements || [])
+  }));
+}
+
+async loadSaveData(saveId: string): Promise<{
+  saveFile: SaveFile;
+  managerData: any;
+  gameState: any;
+}> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  // Get save file info
+  const saveResult = await this.db.query('SELECT * FROM save_files WHERE id = ?', [saveId]);
+  if (!saveResult.values || saveResult.values.length === 0) {
+    throw new Error('Save file not found');
+  }
+
+  const saveFile = this.convertDbRowToCamelCase(saveResult.values[0]);
+
+  // Get manager data
+  const managerResult = await this.db.query('SELECT * FROM managers WHERE save_id = ?', [saveId]);
+  const managerData = managerResult.values && managerResult.values.length > 0 
+    ? this.convertDbRowToCamelCase(managerResult.values[0]) 
+    : null;
+
+  // Get game state
+  const stateResult = await this.db.query('SELECT * FROM game_state WHERE save_id = ?', [saveId]);
+  const gameState = stateResult.values && stateResult.values.length > 0 
+    ? this.convertDbRowToCamelCase(stateResult.values[0]) 
+    : null;
+
+  // Get selected club data
+  if (managerData?.clubId) {
+    const clubData = await this.getClub(managerData.clubId);
+    managerData.selectedClub = clubData;
+  }
+
+  return {
+    saveFile,
+    managerData,
+    gameState
+  };
+}
+
+async deleteSave(saveId: string): Promise<void> {
+  if (!this.db) throw new Error('Database not initialized');
+
+  try {
+    // Delete all related data
+    const deleteQueries = [
+      'DELETE FROM save_files WHERE id = ?',
+      'DELETE FROM game_state WHERE save_id = ?',
+      'DELETE FROM managers WHERE save_id = ?',
+      'DELETE FROM players WHERE save_id = ?',
+      'DELETE FROM clubs WHERE save_id = ?',
+      'DELETE FROM league_tables WHERE save_id = ?',
+      // Add other related tables as needed
+    ];
+
+    for (const query of deleteQueries) {
+      try {
+        await this.db.run(query, [saveId]);
+      } catch (err) {
+        // Some tables might not have save_id column, continue
+        console.warn(`Failed to delete from table: ${err}`);
+      }
+    }
+
+    console.log(`Save deleted successfully: ${saveId}`);
+  } catch (error) {
+    console.error('Error deleting save:', error);
     throw error;
   }
 }
@@ -745,20 +914,6 @@ async createSaveFast(saveData: {
     );
 
     console.log(`Save loaded: ${saveId}`);
-  }
-
-  async getSaveFiles(): Promise<SaveFile[]> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const result = await this.db.query('SELECT * FROM save_files ORDER BY last_played DESC');
-    return result.values || [];
-  }
-
-  async deleteSave(saveId: string): Promise<void> {
-    if (!this.db) throw new Error('Database not initialized');
-
-    await this.db.run('DELETE FROM save_files WHERE id = ?', [saveId]);
-    console.log(`Save deleted: ${saveId}`);
   }
 
   // ===== LEAGUE TABLE OPERATIONS =====
@@ -1443,14 +1598,14 @@ async getGameState(): Promise<GameState | null> {
 
   // ===== CLEANUP =====
 
-  async close(): Promise<void> {
-    if (this.db) {
-      await this.db.close();
-      this.db = null;
-      this.isReady = false;
-      console.log('Database connection closed');
-    }
-  }
+  // async close(): Promise<void> {
+  //   if (this.db) {
+  //     await this.db.close();
+  //     this.db = null;
+  //     this.isReady = false;
+  //     console.log('Database connection closed');
+  //   }
+  // }
 
   get ready(): boolean {
     return this.isReady;
