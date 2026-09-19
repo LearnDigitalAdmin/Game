@@ -109,7 +109,8 @@ export class TacticalEngine {
       shirtNumber: number;
       role: PlayerRole;
     }[],
-    mentality: 'ultra_defensive' | 'defensive' | 'balanced' | 'attacking' | 'ultra_attacking' = 'balanced'
+    mentality: 'ultra_defensive' | 'defensive' | 'balanced' | 'attacking' | 'ultra_attacking' = 'balanced',
+    overrides?: Partial<Pick<Tactics, 'tempo' | 'pressure' | 'def_line' | 'possession_style' | 'ball_recovery'>>
   ): Promise<Tactics> {
     if (!this.db) throw new Error('Database not set');
 
@@ -154,6 +155,10 @@ export class TacticalEngine {
       is_active: true,
       created_at: now,
       updated_at: now,
+      // Manual settings-panel adjustments win over the mentality-derived
+      // defaults above, so the tempo/pressure/def-line sliders actually
+      // change what gets persisted instead of being cosmetic.
+      ...overrides,
     };
 
     // Insert tactics record
@@ -328,6 +333,69 @@ export class TacticalEngine {
       created_at: row.created_at,
       updated_at: row.updated_at,
     })) || [];
+  }
+
+  /**
+   * Get the most recently saved tactic for a club, including its 11 player
+   * assignments — used to pre-populate the tactics editor with whatever the
+   * manager last saved, instead of always starting from a blank formation.
+   */
+  async getActiveTacticWithAssignments(clubId: string): Promise<Tactics | null> {
+    if (!this.db) return null;
+
+    const result = await this.db.query(
+      'SELECT * FROM tactics WHERE club_id = ? ORDER BY created_at DESC LIMIT 1',
+      [clubId]
+    );
+
+    if (!result.values || result.values.length === 0) return null;
+    const row: any = result.values[0];
+
+    const assignmentsResult = await this.db.query(
+      'SELECT * FROM player_tactical_assignments WHERE tactic_id = ? ORDER BY position_slot ASC',
+      [row.id]
+    );
+
+    const player_assignments = (assignmentsResult.values || []).map((a: any) => ({
+      player_id: a.player_id,
+      shirt_number: a.shirt_number,
+      position_slot: a.position_slot,
+      role: a.role,
+      instructions: [],
+      ...(a.x_override != null && a.y_override != null
+        ? { positioning_override: { x: a.x_override, y: a.y_override } }
+        : {}),
+    }));
+
+    return {
+      id: row.id,
+      club_id: row.club_id,
+      season: row.season,
+      formation_id: row.formation_id,
+      name: row.name,
+      mentality: row.mentality,
+      tempo: row.tempo,
+      pressure: row.pressure,
+      def_line: row.def_line,
+      possession_style: row.possession_style,
+      ball_recovery: row.ball_recovery,
+      passing_length: row.passing_length,
+      corner_delivery: row.corner_delivery,
+      free_kick_delivery: row.free_kick_delivery,
+      throw_in_direction: row.throw_in_direction,
+      offside_trap: row.offside_trap,
+      defensive_width: row.defensive_width,
+      mark_tightly: Boolean(row.mark_tightly),
+      through_balls: row.through_balls,
+      wing_play: row.wing_play,
+      crosses: row.crosses,
+      long_balls: row.long_balls,
+      counter_attacks: row.counter_attacks,
+      player_assignments,
+      is_active: Boolean(row.is_active),
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   }
 
   /**

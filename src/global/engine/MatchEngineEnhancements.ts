@@ -2,17 +2,12 @@
 // Enhancements to MatchEngine to support tactical system integration
 // Provides tactical state management and in-match adjustments
 
+import type { MatchState, MatchEvent } from './types/MatchTypes';
 import {
-  MatchState,
-  TeamMatchState,
-  MatchEvent,
-} from './types/MatchTypes';
-import {
-  TacticalModifiers,
-  TeamTacticalState,
   TacticsMatchIntegrationLayer,
+  type TeamTacticalState,
 } from './TacticsMatchIntegration';
-import { Tactics, Formation } from '../tactics/TacticalDatabaseSchema';
+import type { Tactics, Formation } from '../tactics/TacticalDatabaseSchema';
 import { TacticsAwareEventGenerator } from './simulation/TacticsAwareEventGenerator';
 
 /**
@@ -56,14 +51,14 @@ export class MatchEngineEnhancements {
       enhancedState.homeTeamTacticalState = TacticsMatchIntegrationLayer.setupTeamTacticalState(
         homeTactics,
         homeFormation
-      );
+      ) ?? undefined;
     }
 
     if (awayTactics && awayFormation) {
       enhancedState.awayTeamTacticalState = TacticsMatchIntegrationLayer.setupTeamTacticalState(
         awayTactics,
         awayFormation
-      );
+      ) ?? undefined;
     }
 
     enhancedState.lastTacticalAdjustment = 0;
@@ -85,8 +80,10 @@ export class MatchEngineEnhancements {
    * Create tactics-aware event generator
    * Should be used instead of regular EventGenerator
    */
-  createTacticsAwareEventGenerator(simulationConfig: any): TacticsAwareEventGenerator {
-    this.tacticsAwareEventGenerator = new TacticsAwareEventGenerator(simulationConfig);
+  createTacticsAwareEventGenerator(_simulationConfig?: any): TacticsAwareEventGenerator {
+    // _simulationConfig is reserved for when TacticsAwareEventGenerator accepts
+    // config-driven event frequency; its constructor currently takes no arguments.
+    this.tacticsAwareEventGenerator = new TacticsAwareEventGenerator();
     return this.tacticsAwareEventGenerator;
   }
 
@@ -231,6 +228,7 @@ export class MatchEngineEnhancements {
           matchState.homeTeamTacticalState.modifiers,
           matchState
         );
+        void mods; // not yet applied — reserved for when player ratings consume tactical mods
 
         // Apply modifiers to player (in actual implementation, would affect ratings)
         // Example: player.liveRating *= mods.moraleMod;
@@ -247,6 +245,7 @@ export class MatchEngineEnhancements {
           matchState.awayTeamTacticalState.modifiers,
           matchState
         );
+        void mods; // not yet applied — reserved for when player ratings consume tactical mods
 
         // Apply modifiers to player
       }

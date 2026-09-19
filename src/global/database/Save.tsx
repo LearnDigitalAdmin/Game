@@ -168,6 +168,7 @@ export class FootballManagerDB {
       
       this.db = await this.connectionManager.getConnection("footballmanager");
       await this.createTables();
+      await this.migratePlayerAvailabilityColumns();
       this.isReady = true;
       
       console.log('Football Manager Database initialized successfully');
@@ -183,6 +184,59 @@ export class FootballManagerDB {
       this.db = null;
       this.isReady = false;
       console.log('Football Manager Database connection closed');
+    }
+  }
+
+  /**
+   * Expose the raw SQLite connection so other self-contained subsystems
+   * (global/tactics, global/financial) that own their own tables can share
+   * this save's database instead of opening a second connection.
+   */
+  getConnection(): SQLiteDBConnection | null {
+    return this.db;
+  }
+
+  /**
+   * Additive schema migration: the tactics module's LineupConstraints reads
+   * availability directly off `players` (status / injury / suspension
+   * columns) that predate it, and the financial module's loan system needs
+   * a way to track a loaned player's real owner. Add the columns both need
+   * if missing, so injuries/suspensions/loans actually gate and move
+   * players instead of the queries silently failing against columns that
+   * don't exist.
+   */
+  private async migratePlayerAvailabilityColumns(): Promise<void> {
+    if (!this.db) return;
+
+    const existing = await this.db.query(`PRAGMA table_info(players)`);
+    const columnNames = new Set(
+      (existing.values || []).map((row: any) => row.name as string)
+    );
+
+    const requiredColumns: { name: string; ddl: string }[] = [
+      { name: 'status', ddl: `status TEXT NOT NULL DEFAULT 'active'` },
+      { name: 'injury_type', ddl: `injury_type TEXT` },
+      { name: 'injury_duration_weeks', ddl: `injury_duration_weeks INTEGER NOT NULL DEFAULT 0` },
+      { name: 'yellow_cards', ddl: `yellow_cards INTEGER NOT NULL DEFAULT 0` },
+      { name: 'last_match_date', ddl: `last_match_date TEXT` },
+      { name: 'suspension_end_date', ddl: `suspension_end_date TEXT` },
+      // Loans: the player's row still lives at the borrowing club (club_id),
+      // this remembers who actually owns them so the loan can be reversed
+      // when it ends or gets recalled.
+      { name: 'on_loan_from_club_id', ddl: `on_loan_from_club_id TEXT` },
+      { name: 'loan_return_date', ddl: `loan_return_date TEXT` },
+    ];
+
+    for (const column of requiredColumns) {
+      if (columnNames.has(column.name)) continue;
+      try {
+        await this.db.execute(`ALTER TABLE players ADD COLUMN ${column.ddl}`);
+        console.log(`🛠️ Added players.${column.name} column`);
+      } catch (error) {
+        // Guard against a race with another migration path adding the same
+        // column between the PRAGMA check and this ALTER.
+        console.warn(`Could not add players.${column.name} (may already exist):`, error);
+      }
     }
   }
 
@@ -1060,7 +1114,7 @@ async getFreeAgents(): Promise<Player[]> {
   if (!this.db) throw new Error('Database not initialized');
 
   const result = await this.db.query(
-    'SELECT * FROM players WHERE club_id IS NULL ORDER BY rating DESC',
+    "SELECT * FROM players WHERE club_id IS NULL AND status != 'retired' ORDER BY rating DESC",
     []
   );
   
@@ -1110,7 +1164,7 @@ async getPlayer(playerId: string): Promise<Player | null> {
 async searchPlayers(query: string, clubId?: string, position?: string, minRating?: number, maxValue?: number): Promise<Player[]> {
   if (!this.db) throw new Error('Database not initialized');
 
-  let sql = `SELECT * FROM players WHERE (first_name LIKE ? OR last_name LIKE ?)`;
+  let sql = `SELECT * FROM players WHERE (first_name LIKE ? OR last_name LIKE ?) AND status != 'retired'`;
   let params: any[] = [`%${query}%`, `%${query}%`];
 
   if (clubId) {
@@ -1536,7 +1590,7 @@ async getGameState(): Promise<GameState | null> {
       'SELECT * FROM clubs WHERE division_id = ? ORDER BY rank ASC',
       [divisionId]
     );
-    return result.values || [];
+    return this.convertDbResultsToCamelCase(result.values || []);
   }
 
   // ===== MANAGER OPERATIONS =====

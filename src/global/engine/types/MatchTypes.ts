@@ -180,6 +180,7 @@ export interface MatchEvent {
   };
   xG?: number; // Expected goals value
   probability?: number; // Event probability
+  data?: Record<string, unknown>; // Extra event-specific payload (e.g. tactical adjustment details)
 
   // Replay/highlight information
   isHighlight: boolean;

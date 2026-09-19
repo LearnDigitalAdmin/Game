@@ -27,6 +27,20 @@ export interface Player {
   morale?: number;
   fitness?: number;
   matchSharpness?: number;
+  // Present in the `players` table from the start but previously undeclared
+  // here — contract end date, ISO string.
+  contractEnd?: string | null;
+  // Added by the tactics-availability migration (Save.tsx).
+  status?: 'active' | 'injured' | 'suspended' | 'retired';
+  injuryType?: string | null;
+  injuryDurationWeeks?: number;
+  yellowCards?: number;
+  lastMatchDate?: string | null;
+  suspensionEndDate?: string | null;
+  // Added by the financial/loans migration (Save.tsx) — set while a player
+  // is out on loan; clubId holds the borrowing club, this holds the real owner.
+  onLoanFromClubId?: string | null;
+  loanReturnDate?: string | null;
 }
 
 export interface Injury {

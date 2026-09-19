@@ -6,8 +6,19 @@ import { MediaPanel } from "../media/MediaPanel";
 import { StaffPanel } from "../staff/StaffPanel";
 import { BoardTransfers } from "../transfers/BoardTransfers";
 import IntegratedCalendarView from "../../global/calendar/CalendarView";
+import type { FootballManagerDB } from "../../global/database/Save";
 
-export function OwnerPages({ page, palette }: { page: string; palette: any }) {
+export function OwnerPages({
+  page,
+  palette,
+  managerData,
+  database,
+}: {
+  page: string;
+  palette: any;
+  managerData: any;
+  database: FootballManagerDB;
+}) {
   const Header = ({ title, subtitle }: { title: string; subtitle: string }) => (
     <div className="col-span-12">
       <div className="flex items-center justify-between">
@@ -26,7 +37,7 @@ export function OwnerPages({ page, palette }: { page: string; palette: any }) {
     return (
       <>
         <Header title="Finances" subtitle="Summary & wages" />
-        <FinancePanel/>
+        <FinancePanel managerData={managerData} database={database} />
       </>
     );
   if (page === "stadium")
@@ -47,7 +58,7 @@ export function OwnerPages({ page, palette }: { page: string; palette: any }) {
     return (
       <>
         <Header title="Transfers" subtitle="Board strategy" />
-        <BoardTransfers/>
+        <BoardTransfers managerData={managerData} database={database} />
       </>
     );
   if (page === "media")

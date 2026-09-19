@@ -12,6 +12,7 @@ import type {
 } from '../types/MatchTypes';
 import MatchEngine, { type MatchResult } from '../MatchEngine';
 import type { MatchSpeed } from '../MatchEngineConfig';
+import type { Tactics, Formation as TacticalFormation } from '../../tactics/TacticalDatabaseSchema';
 
 interface UseMatchEngineProps {
   onEvent?: (event: MatchEvent) => void;
@@ -128,6 +129,21 @@ export const useMatchEngine = ({ onEvent, onFinished, speed = 'default' }: UseMa
     return engineRef.current?.changeFormation(formation) ?? false;
   }, []);
 
+  /**
+   * Layers real tactics (formation, mentality, roles) onto the match that
+   * initializeMatch() just set up. Either side may be null — the engine
+   * simply keeps using its baseline (non-tactical) event generation for a
+   * side with no tactics on record.
+   */
+  const applyTactics = useCallback((
+    homeTactics: Tactics | null,
+    awayTactics: Tactics | null,
+    homeFormation: TacticalFormation | null,
+    awayFormation: TacticalFormation | null
+  ) => {
+    engineRef.current?.setTacticalContext(homeTactics, awayTactics, homeFormation, awayFormation);
+  }, []);
+
   const setMatchSpeed = useCallback((next: MatchSpeed) => {
     engineRef.current?.setMatchSpeed(next);
   }, []);
@@ -147,6 +163,7 @@ export const useMatchEngine = ({ onEvent, onFinished, speed = 'default' }: UseMa
     togglePlay,
     performSubstitution,
     changeFormation,
+    applyTactics,
     setMatchSpeed,
   };
 };

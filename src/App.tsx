@@ -6,6 +6,7 @@ import { ManagerSetupScreen } from "./manager/setup/ManagerSetupScreen";
 import { ManagerLeagueSelection } from "./manager/setup/ManagerLeagueSelection";
 import { ManagerClubSelection } from "./manager/setup/ManagerClubSelection";
 import { gameDB } from "./global/database/Save";
+import { initializeGameSystems } from "./global/systems/GameSystems";
 import { MODES, type GameState, type Mode } from "./global/types/GameTypes";
 import { ModeHome } from "./global/layout/ModeHome";
 import { CalendarProvider } from "./global/calendar/Calendar";
@@ -66,6 +67,7 @@ export default function App() {
     const initDatabase = async () => {
       try {
         await gameDB.initialize();
+        await initializeGameSystems();
         setDbInitialized(true);
       } catch (error) {
         console.error('Failed to initialize database:', error);

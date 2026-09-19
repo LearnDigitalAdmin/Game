@@ -7,7 +7,6 @@ import type {
   MatchState,
   MatchEvent,
   EventType,
-  SimulationConfig,
   TeamMatchState,
   MatchPlayer,
 } from '../types/MatchTypes';
@@ -20,12 +19,12 @@ export class TacticsAwareEventGenerator {
   /**
    * Generate events with tactical modifiers applied
    */
-  async generateEvents(
+  generateEvents(
     matchState: MatchState,
     eventsPerMinute: number,
     homeModifiers: TacticalModifiers | null = null,
     awayModifiers: TacticalModifiers | null = null
-  ): Promise<MatchEvent[]> {
+  ): MatchEvent[] {
     const events: MatchEvent[] = [];
 
     // Use default modifiers if not provided (backward compatible)
@@ -140,8 +139,9 @@ export class TacticsAwareEventGenerator {
   private generateTacticalMovementEvent(
     matchState: MatchState,
     team: TeamMatchState,
-    modifiers: TacticalModifiers
+    _modifiers: TacticalModifiers
   ): MatchEvent | null {
+    // _modifiers is reserved for when the movement description varies by tactical setup
     const player = this.getRandomPlayer(team, true);
     if (!player) return null;
 
@@ -175,8 +175,9 @@ export class TacticsAwareEventGenerator {
     matchState: MatchState,
     defendingTeam: TeamMatchState,
     defendingMod: TacticalModifiers,
-    attackingMod: TacticalModifiers
+    _attackingMod: TacticalModifiers
   ): MatchEvent | null {
+    // _attackingMod is reserved for weighing the attacking side's tactics into defensive success
     const player = this.getRandomPlayer(defendingTeam, true);
     if (!player) return null;
 
@@ -216,10 +217,11 @@ export class TacticsAwareEventGenerator {
   private generateShotEvent(
     matchState: MatchState,
     attackingTeam: TeamMatchState,
-    defendingTeam: TeamMatchState,
+    _defendingTeam: TeamMatchState,
     attackingMod: TacticalModifiers,
     defendingMod: TacticalModifiers
   ): MatchEvent | null {
+    // _defendingTeam is reserved for factoring specific defenders (e.g. GK rating) into shot outcome
     // Determine shot origin based on formation width and attacking width
     const attackingPositions = ['LW', 'RW', 'ST', 'CAM'];
     const potentialShooters = attackingTeam.players.filter(

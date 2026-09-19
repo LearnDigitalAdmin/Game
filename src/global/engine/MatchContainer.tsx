@@ -9,6 +9,8 @@ import type { MatchResult } from './MatchEngine';
 import { useMatchEngine } from './hooks/useMatchEngine';
 import { PitchRenderer } from './visualizer/PitchRenderer';
 import type { MatchSpeed } from './MatchEngineConfig';
+import { tacticsSystem } from '../systems/GameSystems';
+import type { Tactics, Formation as TacticalFormation } from '../tactics/TacticalDatabaseSchema';
 
 interface MatchContainerProps {
   setup: MatchSetup;
@@ -21,6 +23,66 @@ const SPEED_LABELS: Record<MatchSpeed, string> = {
   default: 'Normal',
   'hyper-realistic': 'Slow',
 };
+
+/**
+ * Fetches each side's saved tactics (if any) and layers them onto the
+ * match that was just initialized. Purely additive: any lookup failure or
+ * missing tactics for either club just leaves that side on the engine's
+ * baseline behaviour, so a fixture between two clubs that never touched
+ * the Tactics screen still plays exactly as it did before this wiring.
+ */
+async function loadAndApplyTactics(
+  setup: MatchSetup,
+  applyTactics: (
+    homeTactics: Tactics | null,
+    awayTactics: Tactics | null,
+    homeFormation: TacticalFormation | null,
+    awayFormation: TacticalFormation | null
+  ) => void
+): Promise<void> {
+  try {
+    const { homeClubId, awayClubId } = setup.fixture;
+
+    const [homeTactics, savedAwayTactics, allFormations] = await Promise.all([
+      tacticsSystem.getActiveTactics(homeClubId),
+      tacticsSystem.getActiveTactics(awayClubId),
+      tacticsSystem.getAvailableFormations(),
+    ]);
+
+    let awayTactics = savedAwayTactics;
+
+    // AI-controlled or otherwise untouched clubs typically won't have a
+    // saved tactic — generate a sensible one on the fly rather than send
+    // them out with no tactical identity at all.
+    if (!awayTactics) {
+      const opponentPlayers = setup.awayLineup.players.map((p) => ({
+        id: p.id,
+        shirtNumber: p.number,
+        position: p.position,
+        rating: p.rating,
+        form: p.form,
+      }));
+
+      const homeFormationCode =
+        allFormations.find((f) => f.id === homeTactics?.formation_id)?.code ?? '433';
+
+      awayTactics = await tacticsSystem.generateOpponentTactics(
+        awayClubId,
+        homeFormationCode,
+        homeTactics?.mentality ?? 'balanced',
+        opponentPlayers
+      );
+    }
+
+    const homeFormation = allFormations.find((f) => f.id === homeTactics?.formation_id) ?? null;
+    const awayFormation = allFormations.find((f) => f.id === awayTactics?.formation_id) ?? null;
+
+    applyTactics(homeTactics, awayTactics, homeFormation, awayFormation);
+  } catch (error) {
+    // Tactics are an enhancement layer, never a match-blocking dependency.
+    console.warn('Could not load tactics for this fixture, continuing without them:', error);
+  }
+}
 
 export const MatchContainer: React.FC<MatchContainerProps> = ({
   setup,
@@ -53,6 +115,7 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
     isPaused,
     isFinished,
     initializeMatch,
+    applyTactics,
     togglePlay,
     performSubstitution,
     setMatchSpeed,
@@ -64,8 +127,12 @@ export const MatchContainer: React.FC<MatchContainerProps> = ({
   useEffect(() => {
     if (initializedRef.current === setup.fixture.id) return;
     initializedRef.current = setup.fixture.id;
-    initializeMatch(setup);
-  }, [setup, initializeMatch]);
+
+    (async () => {
+      await initializeMatch(setup);
+      await loadAndApplyTactics(setup, applyTactics);
+    })();
+  }, [setup, initializeMatch, applyTactics]);
 
   const handleSpeedChange = (next: MatchSpeed) => {
     setSpeed(next);

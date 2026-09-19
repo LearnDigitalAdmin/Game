@@ -2,8 +2,13 @@
 import React, { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { MatchService } from '../engine/MatchService';
-import { FootballManagerDB, gameDB } from '../database/Save';
+import { FootballManagerDB, gameDB, type ClubData } from '../database/Save';
 import SQLiteConnectionManager from '../database/Initializer';
+import { financialSystem, getDivisionTier, ensureClubFinancials } from '../systems/GameSystems';
+import { toClubFinancialData } from '../financial/valuationAdapter';
+import { progressClubForSeasonEnd } from '../player/SeasonProgression';
+import { isTransferWindowOpen } from './transferWindow';
+import { generateAiTransferInterest } from '../financial/aiTransferActivity';
 
 // Types
 export type Speed = 'slow' | 'default' | 'fast' | 'faster' | 'holiday';
@@ -661,41 +666,183 @@ class IntegratedCalendarEngine {
     await this.matchService.simulateFixture(fixture);
   }
 
+  /**
+   * Monthly settlement for the user's club: real sponsorship/TV/matchday/
+   * merchandise revenue against real wage/facility/academy/medical/admin
+   * expenses (via the financial subsystem), posted to both the club's
+   * running ledger balance and the board-facing transfer/wage budgets —
+   * so those budgets actually move over the course of a save instead of
+   * only ever draining. Also sweeps for any loan that has reached its
+   * return date and hands the player back to their real owner.
+   */
   private async processFinancialEvent(event: CalendarEvent): Promise<void> {
     const payload = event.payload as FinancialPayload;
-    
-    // Calculate and update club finances
+
     const club = await this.gameDb.getClub(payload.clubId);
-    if (club) {
-      // Deduct monthly wages
-      const monthlyWages = Math.round(club.wageBudget / 12);
-      const newBalance = club.transferBudget - monthlyWages;
-      
-      await this.gameDb.updateClub(payload.clubId, {
-        transferBudget: Math.max(0, newBalance)
+    if (!club) return;
+
+    try {
+      const [squad, tier, table] = await Promise.all([
+        this.gameDb.getClubPlayers(club.id),
+        getDivisionTier(club),
+        this.gameDb.getLeagueTable(club.divisionId),
+      ]);
+
+      const leaguePosition = table.find((row) => row.teamId === club.id)?.position ?? 10;
+      const squadValueMillions = squad.reduce((sum, p) => sum + (p.value ?? 0), 0) / 1_000_000;
+      const averageForm = squad.length
+        ? squad.reduce((sum, p) => sum + (p.form ?? 50), 0) / squad.length
+        : 50;
+
+      const clubFinancialData = toClubFinancialData(club, tier, leaguePosition, squadValueMillions, averageForm);
+      const revenueSystem = financialSystem.getRevenueSystem();
+
+      const sponsorship = revenueSystem.calculateSponsorshipRevenue(clubFinancialData) / 12;
+      const tv = revenueSystem.calculateTVRevenue(clubFinancialData, this._state.seasonYear) / 12;
+      const merchandise = revenueSystem.calculateMerchandiseRevenue(clubFinancialData) / 12;
+
+      const facilities = revenueSystem.calculateFacilityCosts(clubFinancialData) / 12;
+      const academy = revenueSystem.calculateAcademyCosts(clubFinancialData) / 12;
+      const injuredCount = squad.filter((p) => p.status === 'injured').length;
+      const medical = revenueSystem.calculateMedicalCosts(clubFinancialData, injuredCount) / 12;
+      const admin = revenueSystem.calculateAdminCosts(clubFinancialData) / 12;
+      const wages = revenueSystem.calculateMonthlyWageBill(squad.map((p) => (p.wage ?? 0) / 1_000_000));
+
+      const gameNow = this._state.now;
+      await ensureClubFinancials(club);
+
+      for (const [type, amount, source] of [
+        ['sponsorship', sponsorship, 'sponsor'],
+        ['tv', tv, 'broadcaster'],
+        ['merchandise', merchandise, 'retail'],
+      ] as const) {
+        if (amount > 0) await revenueSystem.recordRevenue(club.id, type, amount, source, 'Monthly settlement', undefined, undefined, gameNow);
+      }
+      for (const [type, amount] of [
+        ['facilities', facilities],
+        ['academy', academy],
+        ['medical', medical],
+        ['admin', admin],
+        ['wages', wages],
+      ] as const) {
+        if (amount > 0) await revenueSystem.recordExpense(club.id, type, amount, 'Monthly settlement', undefined, undefined, gameNow);
+      }
+
+      const totalRevenue = sponsorship + tv + merchandise;
+      const totalExpenses = facilities + academy + medical + admin + wages;
+      const netProfit = totalRevenue - totalExpenses;
+
+      await financialSystem.updateClubBalance(club.id, netProfit);
+
+      // Board reinvests a share of profit into the transfer kitty, scaled by
+      // how much confidence they have in the manager; losses simply aren't
+      // replenished rather than pushing the budget negative.
+      const boardShare = Math.max(0, Math.min(1, club.boardConfidence / 100));
+      const transferBudgetDelta = netProfit > 0 ? netProfit * 1_000_000 * 0.4 * boardShare : 0;
+      const newTransferBudget = Math.max(0, club.transferBudget + transferBudgetDelta);
+      // Wage budget tracks the real wage bill plus headroom for new signings.
+      const newWageBudget = Math.round(wages * 1_000_000 * 12 * 1.15);
+
+      await this.gameDb.updateClub(club.id, {
+        transferBudget: Math.round(newTransferBudget),
+        wageBudget: newWageBudget,
       });
-      
-      console.log(`Monthly financial update for ${club.name}: -${monthlyWages} wages`);
+
+      console.log(
+        `💰 Monthly settlement for ${club.name}: revenue €${(totalRevenue).toFixed(2)}M, ` +
+          `expenses €${totalExpenses.toFixed(2)}M, net €${netProfit.toFixed(2)}M`
+      );
+
+      await this.sweepExpiredLoans(gameNow);
+      await this.checkAiTransferInterest(club, gameNow);
+    } catch (error) {
+      console.error('Error processing monthly financial settlement:', error);
+    }
+  }
+
+  /**
+   * During an open transfer window, rolls a chance for other clubs to make
+   * unsolicited offers on the user's better players — see
+   * aiTransferActivity.ts. Offers land as pending incoming offers the user
+   * can accept or reject from the Transfers screen; nothing here completes
+   * a deal on its own.
+   */
+  private async checkAiTransferInterest(club: ClubData, gameNow: Date): Promise<void> {
+    if (!isTransferWindowOpen(gameNow)) return;
+
+    try {
+      const result = await generateAiTransferInterest(this.gameDb, club, gameNow);
+      if (result.offersMade > 0) {
+        console.log(`📨 AI transfer interest: ${result.offersMade} offer(s) received for ${result.playerNames.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('Error checking AI transfer interest:', error);
+    }
+  }
+
+  /**
+   * Returns any player whose loan has reached its return date back to
+   * their real owning club. Runs alongside the monthly settlement rather
+   * than its own event type, since a loan window is measured in months
+   * and this cadence is already firing regularly.
+   */
+  private async sweepExpiredLoans(gameNow: Date): Promise<void> {
+    if (!this.userClubId) return;
+
+    try {
+      const activeLoans = await financialSystem.getLoanSystem().getActiveLoans(this.userClubId, true);
+      const borrowedLoans = await financialSystem.getLoanSystem().getActiveLoans(this.userClubId, false);
+
+      for (const loan of [...activeLoans, ...borrowedLoans]) {
+        if (new Date(loan.endDate).getTime() > gameNow.getTime()) continue;
+
+        await financialSystem.getLoanSystem().completeLoan(loan.id, loan.playerId);
+        await this.gameDb.updatePlayer(loan.playerId, {
+          clubId: loan.ownerClubId,
+          onLoanFromClubId: null,
+          loanReturnDate: null,
+        });
+
+        console.log(`↩️  Loan ended: player ${loan.playerId} returned to ${loan.ownerClubId}`);
+      }
+    } catch (error) {
+      console.error('Error sweeping expired loans:', error);
     }
   }
 
   private async processTransferWindowEvent(event: CalendarEvent): Promise<void> {
     const isOpening = event.type === 'TRANSFER_WINDOW_OPEN';
     console.log(`Transfer window ${isOpening ? 'opened' : 'closed'}`);
-    
-    // Update game state to reflect transfer window status
-    // This could affect AI behavior, transfer availability, etc.
+    // Window state itself is derived on demand from the game date
+    // (transferWindow.ts) rather than stored here, so anything that needs
+    // to know "is it open right now" — the AI-interest check above, or the
+    // Transfers screen — stays correct even if this event was missed.
   }
 
+  /**
+   * Season end: ages the user's squad by a year, retires anyone past their
+   * (rating-scaled) retirement age, and settles contracts expiring this
+   * season — renewal or release to the free-agent pool. See
+   * SeasonProgression.ts for why this doesn't call PlayerLifecycleSystem
+   * directly (that module targets tables this game's schema doesn't have).
+   */
   private async processSeasonEndEvent(event: CalendarEvent): Promise<void> {
     console.log('Processing season end...');
-    if (!event) {
-        return;
+    if (!event || !this.userClubId) return;
+
+    try {
+      const club = await this.gameDb.getClub(this.userClubId);
+      if (!club) return;
+
+      const result = await progressClubForSeasonEnd(this.gameDb, club, this._state.now);
+      console.log(
+        `📅 Season progression for ${club.name}: ${result.aged} aged, ${result.retired.length} retired` +
+          (result.retired.length ? ` (${result.retired.join(', ')})` : '') +
+          `, ${result.contractsRenewed} contracts renewed, ${result.contractsReleased} released to free agency`
+      );
+    } catch (error) {
+      console.error('Error processing season-end player progression:', error);
     }
-    
-    // Calculate final league positions, promotions, relegations
-    // Handle contract renewals, retirements, etc.
-    // This would be a major event with lots of processing
   }
 
   private async processSeasonStartEvent(event: CalendarEvent): Promise<void> {

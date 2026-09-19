@@ -50,7 +50,8 @@ export class TacticsSystem {
       shirtNumber: number;
       role: PlayerRole;
     }[],
-    mentality: 'ultra_defensive' | 'defensive' | 'balanced' | 'attacking' | 'ultra_attacking' = 'balanced'
+    mentality: 'ultra_defensive' | 'defensive' | 'balanced' | 'attacking' | 'ultra_attacking' = 'balanced',
+    overrides?: Partial<Pick<Tactics, 'tempo' | 'pressure' | 'def_line' | 'possession_style' | 'ball_recovery'>>
   ): Promise<Tactics> {
     // Validate player availability
     const validation = await this.lineupConstraints.validateLineup(
@@ -69,10 +70,19 @@ export class TacticsSystem {
       formationCode,
       tacticName,
       playerAssignments,
-      mentality
+      mentality,
+      overrides
     );
 
     return tactics;
+  }
+
+  /**
+   * Get the most recently saved tactic for a club, with its 11 player
+   * assignments already attached — used to pre-populate the tactics editor.
+   */
+  async getActiveTactics(clubId: string): Promise<Tactics | null> {
+    return await this.tacticalEngine.getActiveTacticWithAssignments(clubId);
   }
 
   /**

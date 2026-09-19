@@ -479,8 +479,8 @@ export class TransferMarketSystem {
     try {
       const result = await this.db.query(
         `SELECT COUNT(*) as count, SUM(transfer_fee) as total, MAX(transfer_fee) as max_fee
-         FROM completed_transfers WHERE YEAR(transfer_date) = ?`,
-        [season]
+         FROM completed_transfers WHERE strftime('%Y', transfer_date) = ?`,
+        [String(season)]
       );
 
       const row = result.values?.[0];
@@ -490,9 +490,9 @@ export class TransferMarketSystem {
       // Get largest deal
       const largestResult = await this.db.query(
         `SELECT player_name, transfer_fee FROM completed_transfers
-         WHERE YEAR(transfer_date) = ? AND transfer_fee = ?
+         WHERE strftime('%Y', transfer_date) = ? AND transfer_fee = ?
          LIMIT 1`,
-        [season, row?.max_fee || 0]
+        [String(season), row?.max_fee || 0]
       );
 
       const largestDeal = largestResult.values?.[0]

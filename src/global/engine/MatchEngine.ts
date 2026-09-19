@@ -17,6 +17,9 @@ import type {
 } from './types/MatchTypes';
 import { MatchSimulator } from './simulation/MatchSimulator';
 import { EventGenerator } from './simulation/EventGenerator';
+import { TacticsAwareEventGenerator } from './simulation/TacticsAwareEventGenerator';
+import { MatchEngineEnhancements, type TacticallyEnhancedMatchState } from './MatchEngineEnhancements';
+import type { Tactics, Formation as TacticalFormation } from '../tactics/TacticalDatabaseSchema';
 import { PlayerRater } from './performance/PlayerRater';
 import { FormCalculator } from './performance/FormCalculator';
 import { DevelopmentTracker } from './performance/DevelopmentTracker';
@@ -43,6 +46,10 @@ export class MatchEngine {
 
   private simulator: MatchSimulator;
   private eventGenerator: EventGenerator;
+  private tacticsEnhancements: MatchEngineEnhancements | null = null;
+  private tacticsAwareEventGenerator: TacticsAwareEventGenerator | null = null;
+  private tacticsEnabled: boolean = false;
+  private lastTacticalCheckMinute: number = 0;
   private playerRater: PlayerRater;
   private formCalculator: FormCalculator;
   private developmentTracker: DevelopmentTracker;
@@ -98,6 +105,10 @@ export class MatchEngine {
     this.secondHalfStoppage = 2 + Math.floor(Math.random() * 4);
     this.lastProcessedMinute = 0;
     this.elapsedBeforePause = 0;
+    this.tacticsEnabled = false;
+    this.tacticsEnhancements = null;
+    this.tacticsAwareEventGenerator = null;
+    this.lastTacticalCheckMinute = 0;
 
     this.matchState = {
       id: uuidv4(),
@@ -148,6 +159,34 @@ export class MatchEngine {
     });
 
     this.emit('match-initialized', this.matchState);
+  }
+
+  /**
+   * Layer the real tactical system (formations, roles, mentality) on top of
+   * an already-initialized match. Optional by design: a fixture with no
+   * tactics on either side still plays out on the baseline engine exactly
+   * as before this was wired in. Call after initializeMatch().
+   */
+  setTacticalContext(
+    homeTactics: Tactics | null,
+    awayTactics: Tactics | null,
+    homeFormation: TacticalFormation | null,
+    awayFormation: TacticalFormation | null
+  ): void {
+    if (!this.matchState) return;
+    if (!homeTactics && !awayTactics) return;
+
+    this.tacticsEnhancements = new MatchEngineEnhancements();
+    this.tacticsEnhancements.initializeTacticalSystem(
+      this.matchState,
+      homeTactics,
+      awayTactics,
+      homeFormation,
+      awayFormation
+    );
+    this.tacticsAwareEventGenerator = new TacticsAwareEventGenerator();
+    this.tacticsEnabled = true;
+    this.lastTacticalCheckMinute = 0;
   }
 
   /**
@@ -307,7 +346,7 @@ export class MatchEngine {
   private simulateMinute(minute: number): void {
     if (!this.matchState) return;
 
-    const events = this.eventGenerator.generateMinuteEvents(this.matchState, minute);
+    const events = this.generateEventsForMinute(minute);
     for (const event of events) {
       this.processEvent(event);
     }
@@ -317,6 +356,7 @@ export class MatchEngine {
     this.updateMomentum();
     this.updateCrowd();
     this.autoSubstituteAI();
+    this.applyTacticalTick(minute);
 
     if (minute === HALF_TIME_MINUTE) {
       this.processEvent({
@@ -329,6 +369,52 @@ export class MatchEngine {
         isHighlight: false,
       });
       this.recoverAtHalfTime();
+    }
+  }
+
+  /**
+   * Event generation for one minute: the tactics-aware generator when a
+   * tactical context has been set (formation/mentality genuinely shape
+   * shot, pass, defensive and set-piece thresholds), the baseline generator
+   * otherwise.
+   */
+  private generateEventsForMinute(minute: number): MatchEvent[] {
+    if (!this.matchState) return [];
+
+    if (this.tacticsEnabled && this.tacticsAwareEventGenerator && this.tacticsEnhancements) {
+      const enhanced = this.matchState as TacticallyEnhancedMatchState;
+      const homeModifiers = this.tacticsEnhancements.getHomeTeamTacticalState(enhanced)?.modifiers ?? null;
+      const awayModifiers = this.tacticsEnhancements.getAwayTeamTacticalState(enhanced)?.modifiers ?? null;
+
+      return this.tacticsAwareEventGenerator.generateEvents(
+        this.matchState,
+        this.simulationConfig.eventsPerMinute,
+        homeModifiers,
+        awayModifiers
+      );
+    }
+
+    return this.eventGenerator.generateMinuteEvents(this.matchState, minute);
+  }
+
+  /**
+   * In-match tactical upkeep: lets the away side (or either AI side)
+   * react to the scoreline, keeps possession drifting toward whichever
+   * team's tactical setup favours it, and refreshes the tactical
+   * advantage figure exposed to the UI. Runs at most once every 15
+   * simulated minutes — mirrors MatchEngineEnhancements' own adjustment
+   * cadence.
+   */
+  private applyTacticalTick(minute: number): void {
+    if (!this.tacticsEnabled || !this.tacticsEnhancements || !this.matchState) return;
+
+    const enhanced = this.matchState as TacticallyEnhancedMatchState;
+    this.tacticsEnhancements.updatePossessionBasedOnTactics(enhanced);
+    this.tacticsEnhancements.updateTacticalAdvantage(enhanced);
+
+    if (minute - this.lastTacticalCheckMinute >= 15) {
+      this.lastTacticalCheckMinute = minute;
+      this.tacticsEnhancements.checkAndApplyTacticalAdjustments(enhanced, true);
     }
   }
 

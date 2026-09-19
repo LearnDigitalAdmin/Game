@@ -538,6 +538,6 @@ function ModePage({
     case "manager":
       return <ManagerPages page={page} palette={palette} managerData={managerData} database={database} />;
     case "owner":
-      return <OwnerPages page={page} palette={palette} />;
+      return <OwnerPages page={page} palette={palette} managerData={managerData} database={database} />;
   }
 }

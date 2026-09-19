@@ -166,13 +166,14 @@ export class RevenueExpenseSystem {
     source?: string,
     description?: string,
     matchId?: string,
-    transferId?: string
+    transferId?: string,
+    asOfDate?: Date
   ): Promise<string> {
     if (!this.db) return '';
 
     try {
       const id = uuidv4();
-      const now = new Date();
+      const now = asOfDate ?? new Date();
       const season = now.getFullYear();
       const quarter = Math.floor(now.getMonth() / 3) + 1;
 
@@ -272,13 +273,14 @@ export class RevenueExpenseSystem {
     amount: number,
     description?: string,
     playerId?: string,
-    transferId?: string
+    transferId?: string,
+    asOfDate?: Date
   ): Promise<string> {
     if (!this.db) return '';
 
     try {
       const id = uuidv4();
-      const now = new Date();
+      const now = asOfDate ?? new Date();
       const season = now.getFullYear();
       const quarter = Math.floor(now.getMonth() / 3) + 1;
 
